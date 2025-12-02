@@ -394,6 +394,10 @@ We're actively looking for feedback during this preview phase. Please report iss
 - [Foundry Local Documentation on Microsoft Learn](https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-local/?view=foundry-classic)
 - [Troubleshooting guide](https://learn.microsoft.com/azure/ai-foundry/foundry-local/reference/reference-best-practice?view=foundry-classic)
 
+## 🧪 Samples
+
+- `samples/open-webui` – step-by-step instructions and Docker compose file for wiring Open WebUI to the Foundry Local OpenAI-compatible endpoint so chats and Whisper transcription stay fully on-device.
+
 ## ⚖️ License
 
 Foundry Local is licensed under the Microsoft Software License Terms. For more details, read the [LICENSE](LICENSE) file.
