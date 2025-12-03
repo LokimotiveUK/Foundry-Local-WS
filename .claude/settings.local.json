@@ -24,7 +24,13 @@
       "Bash(powershell.exe -Command \"foundry service status\")",
       "Bash(powershell.exe -Command \"foundry server status\")",
       "Bash(powershell.exe -Command \"foundry service start\")",
-      "Bash(powershell.exe -Command \"foundry model list\")"
+      "Bash(powershell.exe -Command \"foundry model list\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix Open WebUI scripts to auto-detect dynamic Foundry port\n\nFoundry Local uses a dynamic port that changes on each service restart,\ncausing Open WebUI connection failures when using hardcoded ports.\n\nChanges:\n- Updated start-local-ai.ps1 and start-local-ai-auto.ps1 to parse\n  `foundry service status` output and extract the current port\n- Fixed Unicode encoding issues in PowerShell scripts (replaced\n  special characters with ASCII equivalents)\n- Updated all documentation to explain dynamic port behavior\n- Fixed outdated CLI commands (model load -> model run,\n  server status -> service status)\n- Added troubleshooting section to README.md\n\nFiles modified:\n- start-local-ai.ps1: Auto-detect port, fix encoding\n- start-local-ai-auto.ps1: Auto-detect port, fix encoding\n- docker-compose.yml: Added comments about manual port updates\n- README.md: Dynamic port docs, troubleshooting section\n- SETUP-GUIDE.md: Updated setup instructions\n- STATUS.md: Simplified quick reference\n- QUICK-FIX.md: Added port mismatch fix\n- READY-TO-USE.md: Streamlined getting started guide\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit:*)",
+      "Bash(powershell.exe -Command \"foundry service start; Start-Sleep -Seconds 3; foundry service status\")",
+      "Bash(powershell.exe -Command \"docker run -d --name open-webui --restart unless-stopped -p 3000:8080 -e OPENAI_API_BASE_URL=http://host.docker.internal:53398/v1 -e OPENAI_API_KEY=local-key -e ENABLE_SIGNUP=false -v \"\"$env:LOCALAPPDATA\\open-webui:/app/backend/data\"\" ghcr.io/open-webui/open-webui:main\")",
+      "Bash(powershell.exe -Command \"$dataPath = \"\"$env:LOCALAPPDATA\\open-webui\"\"; docker run -d --name open-webui --restart unless-stopped -p 3000:8080 -e OPENAI_API_BASE_URL=http://host.docker.internal:53398/v1 -e OPENAI_API_KEY=local-key -e ENABLE_SIGNUP=false -v \"\"$dataPath:/app/backend/data\"\" ghcr.io/open-webui/open-webui:main\")",
+      "Bash(powershell.exe -File \"C:\\GitHub\\Foundry-Local\\Foundry-Local-WS\\samples\\open-webui\\start-local-ai-auto.ps1\")"
     ],
     "deny": [],
     "ask": []
