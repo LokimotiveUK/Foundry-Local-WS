@@ -1,6 +1,6 @@
 # Sample: Open WebUI + Foundry Local
 
-This sample shows how to point [Open WebUI](https://github.com/open-webui/open-webui) at the local OpenAI‑compatible endpoint that Foundry Local exposes, so every conversation and audio transcription stays on your device and can leverage the Snapdragon X Elite/X Plus NPU.
+This sample shows how to point [Open WebUI](https://github.com/open-webui/open-webui) at the local OpenAI-compatible endpoint that Foundry Local exposes, so every conversation and audio transcription stays on your device and can leverage the Snapdragon X Elite/X Plus NPU.
 
 ## Prerequisites
 
@@ -20,11 +20,19 @@ cd samples/open-webui
 
 This script will:
 - Start Foundry Local service
+- Automatically detect the Foundry endpoint port
 - Load AI models (phi-3.5-mini, qwen2.5-0.5b)
-- Pull and launch Open WebUI container
+- Pull and launch Open WebUI container with the correct port
 - Optionally configure Whisper for speech-to-text
 
 Then browse to `http://localhost:3000` and create your admin account.
+
+For non-interactive automation (CI/CD or scripting):
+```powershell
+.\start-local-ai-auto.ps1
+# Or with Whisper enabled:
+.\start-local-ai-auto.ps1 -EnableWhisper
+```
 
 To stop everything:
 ```powershell
@@ -42,23 +50,25 @@ To stop everything:
 foundry service start
 
 # Load your preferred models so the NPU-optimized variants stay in memory
-foundry model load phi-3.5-mini
-foundry model load qwen2.5-0.5b
+foundry model run phi-3.5-mini
+foundry model run qwen2.5-0.5b
 
-# (Optional) verify endpoint details
-foundry server status
+# Check the service status to find the endpoint port
+foundry service status
 ```
 
-> The status command prints the HTTP base URL (defaults to `http://localhost:5273/v1`) and confirms which models are loaded. Keep that URL handy; Open WebUI will call it as if it were the OpenAI API.
+> **Important:** Foundry Local uses a dynamic port that changes on each service restart. The `foundry service status` command shows the current port (e.g., `http://127.0.0.1:57537`). Note this port number for the next step.
 
 ### 2. Launch Open WebUI against Foundry Local
 
 #### Quick `docker run`
 
+Replace `<PORT>` with the port number from `foundry service status`:
+
 ```powershell
 docker run -d --name open-webui --restart=unless-stopped `
   -p 3000:8080 `
-  -e OPENAI_API_BASE_URL="http://host.docker.internal:5273/v1" `
+  -e OPENAI_API_BASE_URL="http://host.docker.internal:<PORT>/v1" `
   -e OPENAI_API_KEY="local-key" `
   -e ENABLE_SIGNUP="false" `
   -v "$Env:LOCALAPPDATA\open-webui:/app/backend/data" `
@@ -71,10 +81,14 @@ docker run -d --name open-webui --restart=unless-stopped `
 
 #### Docker Compose
 
-This repository includes `samples/open-webui/docker-compose.yml` with the same settings. From this folder run:
+This repository includes `samples/open-webui/docker-compose.yml`. Before using it, update the port number in the file to match your Foundry service port:
 
 ```powershell
-cd samples/open-webui
+# First, check your Foundry port
+foundry service status
+
+# Edit docker-compose.yml and update OPENAI_API_BASE_URL with the correct port
+# Then run:
 docker compose up -d
 ```
 
@@ -82,17 +96,13 @@ docker compose up -d
 
 1. Browse to `http://localhost:3000` and create the initial admin account.
 2. Go to **Admin > Settings > Providers** and confirm "OpenAI Compatible" is enabled. The defaults use the env vars we just set.
-3. Under **Models**, add entries that match the IDs reported by `foundry model ls --details`. Example:
+3. Under **Models**, add entries that match the IDs reported by `foundry model list`. Example:
    - **Name**: `phi-3.5-mini`
    - **Model ID**: `phi-3.5-mini-instruct-generic-npu`
    - **Provider**: OpenAI Compatible
 4. Repeat for `qwen2.5-0.5b` or any other aliases you plan to keep loaded.
 
-Start a chat and select one of the new models—responses should stream instantly from Foundry Local. You can tail the Foundry logs to verify requests land locally:
-
-```powershell
-foundry server logs --tail 50
-```
+Start a chat and select one of the new models—responses should stream instantly from Foundry Local.
 
 ### 4. Optional: Local Whisper integration
 
@@ -100,11 +110,11 @@ To enable speech input/transcription without leaving the device:
 
 1. Load an audio-capable model in Foundry Local (for example `whisper-small`):
    ```powershell
-   foundry model load whisper-small
+   foundry model run whisper-small
    ```
-2. Add the following env vars before launching Open WebUI:
+2. Add the following env vars before launching Open WebUI (replace `<PORT>` with your Foundry port):
    ```text
-   WHISPER_API_BASE_URL=http://host.docker.internal:5273/v1
+   WHISPER_API_BASE_URL=http://host.docker.internal:<PORT>/v1
    WHISPER_API_KEY=local-key
    ```
 3. Restart the container. The microphone icon in Open WebUI now sends audio to Foundry Local's `/audio/transcriptions` endpoint.
@@ -116,3 +126,21 @@ To enable speech input/transcription without leaving the device:
 - Frontend tweaks (custom panels, charts) can be done by forking Open WebUI and editing its React components—this sample keeps the wiring focused on the local inference path.
 
 With this setup every token stays on your Surface's NPU, delivering low-latency chat through a familiar web UI while remaining completely offline.
+
+## Troubleshooting
+
+### Models not appearing in Open WebUI
+- Check that Foundry is running: `foundry service status`
+- Verify the port in your Open WebUI container matches the Foundry port
+- Restart Open WebUI with the correct port if Foundry was restarted
+
+### "Backend Required" error
+- Clear browser cache or use incognito mode
+- Ensure you're accessing `http://localhost:3000` (not https)
+- Wait a few seconds for the container to fully start
+
+### Port mismatch after Foundry restart
+Foundry uses a dynamic port. If you restart the Foundry service, you'll need to restart Open WebUI with the new port. The easiest way is to re-run the startup script:
+```powershell
+.\start-local-ai.ps1
+```

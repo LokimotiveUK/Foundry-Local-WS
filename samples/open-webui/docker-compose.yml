@@ -1,3 +1,13 @@
+# NOTE: Foundry Local uses a dynamic port that changes on each restart.
+# The PowerShell scripts (start-local-ai.ps1, start-local-ai-auto.ps1)
+# automatically detect the correct port. Using docker-compose requires
+# manually updating the port below.
+#
+# To find the current Foundry port, run:
+#   foundry service status
+#
+# Then update OPENAI_API_BASE_URL with the correct port number.
+
 services:
   open-webui:
     container_name: open-webui
@@ -6,10 +16,12 @@ services:
     ports:
       - "3000:8080"
     environment:
-      OPENAI_API_BASE_URL: "http://host.docker.internal:52089/v1"
+      # Update the port number below to match your Foundry service port
+      # Run 'foundry service status' to find the current port
+      OPENAI_API_BASE_URL: "http://host.docker.internal:57537/v1"
       OPENAI_API_KEY: "local-key"
       # Uncomment the next two lines if you also want local speech-to-text via Foundry Local
-      # WHISPER_API_BASE_URL: "http://host.docker.internal:52089/v1"
+      # WHISPER_API_BASE_URL: "http://host.docker.internal:57537/v1"
       # WHISPER_API_KEY: "local-key"
     volumes:
       - type: bind

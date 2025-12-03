@@ -15,7 +15,16 @@
       "Bash(docker exec:*)",
       "Bash(git add:*)",
       "Bash(git commit -m \"$(cat <<''EOF''\nAdd Open WebUI integration sample for fully offline AI chat\n\nThis commit adds a complete sample demonstrating how to run Open WebUI \nwith Foundry Local for a fully offline, privacy-first AI chat experience.\n\nChanges:\n- Added samples/open-webui/ directory with complete integration setup\n- Updated root README.md with Samples section pointing to new sample\n\nNew Files:\n- README.md: Main documentation with quick start and manual setup\n- READY-TO-USE.md: Complete guide with model IDs and configuration steps\n- SETUP-GUIDE.md: Detailed troubleshooting and advanced features\n- STATUS.md: Quick reference for commands and system status\n- setup.ps1: Simple PowerShell script for one-command setup\n- docker-compose.yml: Alternative Docker Compose configuration\n- start-local-ai.ps1: Interactive full-stack startup script\n- start-local-ai-auto.ps1: Non-interactive automated startup\n- stop-local-ai.ps1: Shutdown script for all services\n\nFeatures:\n- 100% offline AI chat using local models (no internet required)\n- NPU-accelerated inference on Snapdragon X Elite/Plus\n- ChatGPT-like web interface via Open WebUI\n- Support for multiple models (Phi-3.5-Mini, Qwen2.5, Qwen-Coder)\n- Optional Whisper integration for speech-to-text\n- Complete privacy - all data stays on device\n- Persistent chat history stored locally\n- Auto-restart capability\n\nTechnical Details:\n- Open WebUI runs in Docker container on port 3000\n- Connects to Foundry Local via host.docker.internal:52089\n- Data persisted to %LOCALAPPDATA%\\open-webui\n- OpenAI-compatible API for seamless integration\n- Works completely offline after initial setup\n\nDocumentation includes setup guides, troubleshooting, model configuration,\nand advanced customization options for personas and RAG integration.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(Get-Content -Path \"C:\\GitHub\\Foundry-Local\\Foundry-Local-WS\\samples\\open-webui\\start-local-ai-auto.ps1\" -Raw)",
+      "Bash(Format-Hex)",
+      "Bash(Select-Object -First 100)",
+      "Bash(docker logs:*)",
+      "Bash(powershell.exe -Command \"Invoke-RestMethod -Uri ''http://localhost:5273/v1/models'' -Method Get | ConvertTo-Json -Depth 5\")",
+      "Bash(powershell.exe -Command \"foundry service status\")",
+      "Bash(powershell.exe -Command \"foundry server status\")",
+      "Bash(powershell.exe -Command \"foundry service start\")",
+      "Bash(powershell.exe -Command \"foundry model list\")"
     ],
     "deny": [],
     "ask": []
