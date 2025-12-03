@@ -1,0 +1,58 @@
+SAMPLE TAX SUMMARY - DELETE THIS FILE AND ADD YOUR OWN DOCUMENTS
+
+Tax Year: 2023
+Filing Status: Single
+Prepared: March 15, 2024
+
+INCOME SUMMARY
+==============
+Wages and Salaries (W-2):      $85,000.00
+Interest Income:                   $450.00
+Dividend Income:                   $800.00
+Capital Gains (Long-term):       $2,500.00
+-----------------------------------------
+Total Income:                   $88,750.00
+
+ADJUSTMENTS TO INCOME
+=====================
+401(k) Contributions:          ($22,500.00)
+Health Savings Account:         ($3,850.00)
+Student Loan Interest:            ($850.00)
+-----------------------------------------
+Adjusted Gross Income:          $61,550.00
+
+DEDUCTIONS
+==========
+Standard Deduction:            ($13,850.00)
+-----------------------------------------
+Taxable Income:                 $47,700.00
+
+TAX CALCULATION
+===============
+Federal Income Tax:              $5,506.00
+State Income Tax:                $2,385.00
+Social Security Tax:             $5,270.00
+Medicare Tax:                    $1,232.50
+-----------------------------------------
+Total Tax Liability:            $14,393.50
+
+PAYMENTS AND CREDITS
+====================
+Federal Withholding:            $12,000.00
+State Withholding:               $3,000.00
+Estimated Tax Payments:          $2,000.00
+-----------------------------------------
+Total Payments:                 $17,000.00
+
+REFUND DUE
+==========
+Federal Refund:                  $2,606.50
+State Refund:                      $615.00
+-----------------------------------------
+Total Refund:                    $3,221.50
+
+NOTES:
+- Maximized 401(k) contributions for 2023
+- HSA fully funded
+- Consider increasing estimated payments for next year
+- Review investment strategy for tax-loss harvesting opportunities

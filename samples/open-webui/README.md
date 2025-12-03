@@ -127,6 +127,67 @@ To enable speech input/transcription without leaving the device:
 
 With this setup every token stays on your Surface's NPU, delivering low-latency chat through a familiar web UI while remaining completely offline.
 
+---
+
+## Private RAG for Healthcare & Finance
+
+For sensitive personal documents (medical records, tax returns, financial statements), we provide a lightweight RAG system that runs 100% locally with a web-based admin UI for document management.
+
+### Quick Start (Docker Compose - Recommended)
+
+```powershell
+cd samples/open-webui/private-rag
+docker compose up -d --build
+```
+
+This starts three services:
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **RAG Admin UI** | http://localhost:8501 | Upload, view, delete documents |
+| RAG API Server | http://localhost:8000 | Query API for Open WebUI |
+| Qdrant | http://localhost:6333 | Vector database |
+
+### Admin UI Features
+
+The web-based admin UI at **http://localhost:8501** provides:
+
+- **Upload Tab**: Drag & drop files, select category (healthcare/finance), save & ingest
+- **Indexed Documents Tab**: View all documents in the vector store, delete individual documents
+- **Local Files Tab**: Browse files on disk, delete files and their vectors
+- **Stats Sidebar**: Vector count, collection status, quick actions
+
+### Add Your Documents
+
+Place files in the `private-rag/documents/` folder:
+- `documents/healthcare/` - Medical records, lab results, prescriptions
+- `documents/finance/` - Bank statements, tax returns, investments
+
+Supported formats: `.txt`, `.md`, `.pdf`, `.docx`
+
+Or use the Admin UI to upload files directly via drag & drop.
+
+### Use in Open WebUI
+
+1. Go to **Workspace > Tools** in Open WebUI
+2. Click **+ Create Tool**
+3. Paste the code from `private-rag/openwebui_tool.py`
+4. Save and enable the tool
+
+Now you can ask questions like:
+- "What were my cholesterol levels in my last blood test?"
+- "What was my total income last year?"
+- "Summarize my recent doctor visit notes"
+
+### Stop the RAG Stack
+
+```powershell
+cd samples/open-webui/private-rag
+docker compose down
+```
+
+See [private-rag/README.md](./private-rag/README.md) for full documentation.
+
 ## Troubleshooting
 
 ### Models not appearing in Open WebUI

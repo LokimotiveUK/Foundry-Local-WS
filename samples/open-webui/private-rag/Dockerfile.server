@@ -1,0 +1,33 @@
+# Private RAG Server
+# FastAPI server with embeddings and Qdrant integration
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies for document processing
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY config.py .
+COPY ingest.py .
+COPY rag_server.py .
+
+# Create documents directory
+RUN mkdir -p /app/documents/healthcare /app/documents/finance
+
+# Expose API port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run server
+CMD ["python", "rag_server.py"]
