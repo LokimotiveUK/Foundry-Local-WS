@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(powershell.exe:*)",
-      "Bash(FOUNDRY_PORT=51413 FOUNDRY_MODEL=\"qwen2.5-0.5b-instruct-generic-cpu:4\" docker compose:*)"
+      "Bash(FOUNDRY_PORT=51413 FOUNDRY_MODEL=\"qwen2.5-0.5b-instruct-generic-cpu:4\" docker compose:*)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []
