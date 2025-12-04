@@ -182,7 +182,7 @@ Answer:"""}
             model=config.FOUNDRY_MODEL,
             messages=messages,
             temperature=0.3,  # Lower temperature for factual accuracy
-            max_tokens=1024
+            max_tokens=2048  # Increased for longer responses
         )
         return response.choices[0].message.content
     except Exception as e:
