@@ -8,6 +8,8 @@ Copy this code into Open WebUI:
 4. Save and enable the tool
 
 This tool connects to the local RAG server to search your private documents.
+
+NOTE: Open WebUI runs in Docker, so use host.docker.internal to reach localhost.
 """
 
 import json
@@ -17,7 +19,9 @@ import requests
 
 class Tools:
     def __init__(self):
-        self.rag_server = "http://localhost:8000"
+        # Use host.docker.internal since Open WebUI runs in Docker
+        # This reaches the RAG server running on the host at port 8000
+        self.rag_server = "http://host.docker.internal:8000"
 
     def search_private_docs(
         self,
@@ -26,13 +30,13 @@ class Tools:
         __user__: dict = {},
     ) -> str:
         """
-        Search your private healthcare and finance documents.
+        Search your private documents (healthcare, finance, job-search, etc).
 
         Use this tool when the user asks about their personal documents,
-        medical records, lab results, financial statements, tax returns, etc.
+        medical records, lab results, financial statements, resumes, cover letters, etc.
 
         :param query: The search query or question about your documents
-        :param category: Optional filter - 'healthcare' or 'finance'
+        :param category: Optional filter - 'healthcare', 'finance', 'job-search', or any custom category
         :return: Relevant information from your private documents
         """
         try:
@@ -60,7 +64,7 @@ class Tools:
             return output
 
         except requests.exceptions.ConnectionError:
-            return "Error: RAG server not running. Start it with: python rag_server.py"
+            return "Error: Cannot connect to RAG server at port 8000. Make sure the private-rag containers are running."
         except Exception as e:
             return f"Error searching documents: {str(e)}"
 
@@ -89,3 +93,19 @@ class Tools:
         :return: Information from your financial documents
         """
         return self.search_private_docs(query, category="finance")
+
+    def search_job_docs(
+        self,
+        query: str,
+        __user__: dict = {},
+    ) -> str:
+        """
+        Search your job search documents (resumes, cover letters, job applications).
+
+        Use this when the user asks about their resume, CV, cover letters,
+        or wants help improving job application materials.
+
+        :param query: Your question about job search documents
+        :return: Information from your job search documents
+        """
+        return self.search_private_docs(query, category="job-search")

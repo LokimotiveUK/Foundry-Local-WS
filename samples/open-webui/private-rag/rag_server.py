@@ -7,13 +7,15 @@ Connects to Qdrant for retrieval and Foundry Local for generation.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
 import openai
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 
@@ -32,10 +34,10 @@ foundry_endpoint: str = None
 
 class QueryRequest(BaseModel):
     """Request model for RAG queries."""
-    query: str
-    category: Optional[str] = None  # healthcare, finance, or None for all
-    top_k: Optional[int] = None
-    include_sources: Optional[bool] = True
+    query: str = Field(..., description="The question to ask about your documents")
+    category: Optional[str] = Field(None, description="Filter by category: 'healthcare', 'finance', 'job-search', or any custom category")
+    top_k: Optional[int] = Field(5, description="Number of document chunks to retrieve")
+    include_sources: Optional[bool] = Field(True, description="Include source documents in response")
 
 
 class QueryResponse(BaseModel):
@@ -58,16 +60,35 @@ class SearchResponse(BaseModel):
 
 
 def get_foundry_endpoint() -> str:
-    """Get the Foundry Local endpoint (auto-detects dynamic port)."""
+    """Get the Foundry Local endpoint (auto-detects dynamic port).
+
+    When running in Docker, we need to use host.docker.internal to reach
+    Foundry Local running on the host machine.
+    """
+    # Check for environment variable override first
+    env_endpoint = os.getenv("FOUNDRY_ENDPOINT")
+    if env_endpoint:
+        logger.info(f"Using FOUNDRY_ENDPOINT from environment: {env_endpoint}")
+        return env_endpoint
+
+    # Try auto-detection (only works when NOT in Docker)
     try:
         from foundry_local import FoundryLocalManager
         manager = FoundryLocalManager(bootstrap=False)
         if manager.is_service_running():
-            return manager.endpoint
+            endpoint = manager.endpoint
+            # If we're in Docker, replace localhost with host.docker.internal
+            if os.path.exists("/.dockerenv") or os.getenv("DOCKER_CONTAINER"):
+                endpoint = endpoint.replace("localhost", "host.docker.internal")
+                endpoint = endpoint.replace("127.0.0.1", "host.docker.internal")
+            logger.info(f"Auto-detected Foundry endpoint: {endpoint}")
+            return endpoint
     except Exception as e:
         logger.warning(f"Could not auto-detect Foundry endpoint: {e}")
 
-    # Fallback to default
+    # Fallback - use host.docker.internal for Docker, localhost otherwise
+    if os.path.exists("/.dockerenv") or os.getenv("DOCKER_CONTAINER"):
+        return "http://host.docker.internal:5273/v1"
     return "http://localhost:5273/v1"
 
 
@@ -78,24 +99,39 @@ def retrieve_context(query: str, category: Optional[str] = None, top_k: int = 5)
 
     # Build filter if category specified
     filter_condition = None
-    if category and category in config.CATEGORIES:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
-        filter_condition = Filter(
-            must=[FieldCondition(key="category", match=MatchValue(value=category))]
-        )
+    if category:
+        # Reload categories to get latest
+        categories = config.load_categories()
+        if category in categories:
+            from qdrant_client.models import FieldCondition, Filter, MatchValue
+            filter_condition = Filter(
+                must=[FieldCondition(key="category", match=MatchValue(value=category))]
+            )
 
-    # Search Qdrant
-    results = qdrant_client.search(
-        collection_name=config.COLLECTION_NAME,
-        query_vector=query_embedding,
-        limit=top_k,
-        score_threshold=config.MIN_SCORE,
-        query_filter=filter_condition
-    )
+    # Search Qdrant using query_points (newer API)
+    try:
+        results = qdrant_client.query_points(
+            collection_name=config.COLLECTION_NAME,
+            query=query_embedding,
+            limit=top_k,
+            score_threshold=config.MIN_SCORE,
+            query_filter=filter_condition
+        )
+        points = results.points
+    except AttributeError:
+        # Fallback for older qdrant-client versions
+        results = qdrant_client.search(
+            collection_name=config.COLLECTION_NAME,
+            query_vector=query_embedding,
+            limit=top_k,
+            score_threshold=config.MIN_SCORE,
+            query_filter=filter_condition
+        )
+        points = results
 
     # Format results
     chunks = []
-    for result in results:
+    for result in points:
         chunks.append({
             "text": result.payload.get("text", ""),
             "document": result.payload.get("document", "unknown"),
@@ -187,9 +223,26 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Private RAG API",
-    description="Local RAG server for healthcare and finance documents",
+    description="""Local RAG server for searching private documents.
+
+Use this API to search your personal documents including:
+- **Healthcare**: Medical records, lab results, prescriptions
+- **Finance**: Bank statements, tax returns, investments
+- **Job Search**: Resumes, cover letters, applications
+- **Custom categories**: Any category you create
+
+All processing happens locally - no data leaves your device.""",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# Add CORS middleware for Open WebUI access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for local development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -259,13 +312,34 @@ async def search_documents(request: SearchRequest):
 @app.get("/categories")
 async def list_categories():
     """List available document categories."""
+    # Reload categories to get latest
+    categories = config.load_categories()
     return {
         name: {
-            "description": info["description"],
-            "path": str(info["path"])
+            "description": info.get("description", ""),
+            "icon": info.get("icon", "📁"),
+            "path": f"documents/{name}/"
         }
-        for name, info in config.CATEGORIES.items()
+        for name, info in categories.items()
     }
+
+
+@app.post("/categories")
+async def create_category(name: str, description: str, icon: str = "📁", system_prompt: str = None):
+    """Create a new document category."""
+    if config.add_category(name, description, icon, system_prompt):
+        return {"status": "success", "message": f"Created category: {name}"}
+    else:
+        raise HTTPException(status_code=400, detail=f"Category '{name}' already exists")
+
+
+@app.delete("/categories/{name}")
+async def delete_category_endpoint(name: str):
+    """Delete a document category."""
+    if config.delete_category(name):
+        return {"status": "success", "message": f"Deleted category: {name}"}
+    else:
+        raise HTTPException(status_code=404, detail=f"Category '{name}' not found")
 
 
 @app.get("/stats")
@@ -273,11 +347,17 @@ async def get_stats():
     """Get collection statistics."""
     try:
         info = qdrant_client.get_collection(config.COLLECTION_NAME)
+        # Handle different qdrant-client versions
+        vectors_count = getattr(info, 'vectors_count', None)
+        if vectors_count is None:
+            vectors_count = getattr(info, 'points_count', 0)
+        points_count = getattr(info, 'points_count', vectors_count)
+        status = getattr(info.status, 'name', str(info.status))
         return {
             "collection": config.COLLECTION_NAME,
-            "vectors_count": info.vectors_count,
-            "points_count": info.points_count,
-            "status": info.status.name
+            "vectors_count": vectors_count,
+            "points_count": points_count,
+            "status": status
         }
     except Exception as e:
         return {"error": str(e)}

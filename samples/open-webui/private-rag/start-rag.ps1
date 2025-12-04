@@ -1,21 +1,42 @@
-# Start Private RAG Stack
-# Launches Qdrant + RAG Server alongside Open WebUI
+# start-rag.ps1
+# Starts the Private RAG stack with auto-detected Foundry port
+#
+# Usage:
+#   ./start-rag.ps1              # Start all services
+#   ./start-rag.ps1 -Rebuild     # Rebuild and start
+#   ./start-rag.ps1 -Stop        # Stop all services
+#   ./start-rag.ps1 -Restart     # Restart with fresh Foundry port detection
 
 param(
-    [switch]$IngestOnly,
-    [switch]$SkipQdrant
+    [switch]$Rebuild,
+    [switch]$Stop,
+    [switch]$Restart,
+    [string]$Model = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Cyan
-Write-Host "  Private RAG Stack for Healthcare & Finance" -ForegroundColor Cyan
+Write-Host "  Private RAG Stack Manager" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
-Write-Host ""
+
+# Stop services if requested
+if ($Stop) {
+    Write-Host "`nStopping RAG services..." -ForegroundColor Yellow
+    docker compose down
+    Write-Host "Done!" -ForegroundColor Green
+    exit 0
+}
+
+# Restart = stop then continue
+if ($Restart) {
+    Write-Host "`nRestarting RAG services..." -ForegroundColor Yellow
+    docker compose down
+}
 
 # Check Docker is running
-Write-Host "[1/5] Checking Docker..." -ForegroundColor Yellow
+Write-Host "`n[1/4] Checking Docker..." -ForegroundColor Yellow
 try {
     docker info 2>&1 | Out-Null
     Write-Host "  Docker is running" -ForegroundColor Green
@@ -24,114 +45,139 @@ try {
     exit 1
 }
 
-# Start Qdrant if not running
-if (-not $SkipQdrant) {
-    Write-Host ""
-    Write-Host "[2/5] Starting Qdrant vector database..." -ForegroundColor Yellow
+# Check if Foundry is running and get the port
+Write-Host "`n[2/4] Detecting Foundry Local..." -ForegroundColor Yellow
+$foundryStatus = & foundry service status 2>&1 | Out-String
 
-    $qdrantRunning = docker ps --filter "name=qdrant" --format "{{.Names}}" 2>$null
-    if ($qdrantRunning -eq "qdrant") {
-        Write-Host "  Qdrant already running" -ForegroundColor Green
-    } else {
-        # Remove old container if exists
-        docker rm -f qdrant 2>$null | Out-Null
+if ($foundryStatus -match "not running") {
+    Write-Host "  Foundry Local is not running. Starting it..." -ForegroundColor Yellow
+    & foundry service start
+    Start-Sleep -Seconds 3
+    $foundryStatus = & foundry service status 2>&1 | Out-String
+}
 
-        # Start Qdrant with persistent storage
-        $localAppData = $env:LOCALAPPDATA
-        docker run -d --name qdrant `
-            -p 6333:6333 -p 6334:6334 `
-            -v "${localAppData}\qdrant:/qdrant/storage" `
-            qdrant/qdrant
-
-        Write-Host "  Qdrant started on port 6333" -ForegroundColor Green
-
-        # Wait for Qdrant to be ready
-        Write-Host "  Waiting for Qdrant to initialize..." -ForegroundColor Gray
-        Start-Sleep -Seconds 3
-    }
+# Extract port from status - look for port number after localhost or 127.0.0.1
+$foundryPort = "5273"  # default
+if ($foundryStatus -match "127\.0\.0\.1:(\d+)" -or $foundryStatus -match "localhost:(\d+)") {
+    $foundryPort = $Matches[1]
+    Write-Host "  Foundry Local running on port: $foundryPort" -ForegroundColor Green
+} elseif ($foundryStatus -match ":(\d{5})") {
+    # Fallback: look for any 5-digit port number (Foundry uses high ports like 51413)
+    $foundryPort = $Matches[1]
+    Write-Host "  Foundry Local running on port: $foundryPort" -ForegroundColor Green
 } else {
-    Write-Host ""
-    Write-Host "[2/5] Skipping Qdrant (--SkipQdrant flag)" -ForegroundColor Gray
+    Write-Host "  Could not detect Foundry port from status output." -ForegroundColor Yellow
+    Write-Host "  Status: $foundryStatus" -ForegroundColor Gray
+    Write-Host "  Using default: $foundryPort" -ForegroundColor Yellow
 }
 
-# Check for Python dependencies
-Write-Host ""
-Write-Host "[3/5] Checking Python dependencies..." -ForegroundColor Yellow
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Set environment variable for docker compose
+$env:FOUNDRY_PORT = $foundryPort
 
-try {
-    python -c "import qdrant_client, sentence_transformers, fastapi" 2>&1 | Out-Null
-    Write-Host "  Dependencies installed" -ForegroundColor Green
-} catch {
-    Write-Host "  Installing dependencies..." -ForegroundColor Gray
-    pip install -r "$scriptDir\requirements.txt"
-    Write-Host "  Dependencies installed" -ForegroundColor Green
+# Auto-detect best available model if not specified
+Write-Host "`n[3/4] Detecting available models..." -ForegroundColor Yellow
+if ($Model -eq "") {
+    try {
+        $modelsResponse = Invoke-RestMethod -Uri "http://localhost:$foundryPort/v1/models" -Method Get -TimeoutSec 5 -ErrorAction SilentlyContinue
+
+        # Prefer models in this order: qwen2.5 (has tool calling), phi-3.5
+        $preferredPatterns = @(
+            "qwen2.5-0.5b-instruct",
+            "qwen2.5-coder",
+            "phi-3.5-mini"
+        )
+
+        foreach ($pattern in $preferredPatterns) {
+            $found = $modelsResponse.data | Where-Object { $_.id -like "*$pattern*" } | Select-Object -First 1
+            if ($found) {
+                $Model = $found.id
+                $toolSupport = if ($found.toolCalling) { "(supports tool calling)" } else { "" }
+                Write-Host "  Selected model: $Model $toolSupport" -ForegroundColor Green
+                break
+            }
+        }
+
+        if ($Model -eq "") {
+            # Fall back to first available model that's not whisper
+            $available = $modelsResponse.data | Where-Object { $_.id -notlike "*whisper*" } | Select-Object -First 1
+            if ($available) {
+                $Model = $available.id
+                Write-Host "  Using available model: $Model" -ForegroundColor Yellow
+            }
+        }
+
+        # List all available models
+        Write-Host "  Available models:" -ForegroundColor Gray
+        foreach ($m in $modelsResponse.data) {
+            $marker = if ($m.id -eq $Model) { " <--" } else { "" }
+            $tool = if ($m.toolCalling) { " [tools]" } else { "" }
+            Write-Host "    - $($m.id)$tool$marker" -ForegroundColor Gray
+        }
+    } catch {
+        Write-Host "  Could not query models API: $_" -ForegroundColor Yellow
+        $Model = "phi-3.5-mini"
+        Write-Host "  Using default model: $Model" -ForegroundColor Yellow
+    }
 }
 
-# Check if documents exist and ingest if needed
-Write-Host ""
-Write-Host "[4/5] Checking documents..." -ForegroundColor Yellow
+if ($Model -ne "") {
+    $env:FOUNDRY_MODEL = $Model
+}
 
-$healthcareDir = Join-Path $scriptDir "documents\healthcare"
-$financeDir = Join-Path $scriptDir "documents\finance"
+# Start the stack
+Write-Host "`n[4/4] Starting RAG services..." -ForegroundColor Yellow
+Write-Host "  Foundry endpoint: http://host.docker.internal:$foundryPort/v1" -ForegroundColor Gray
+Write-Host "  Model: $Model" -ForegroundColor Gray
 
-$healthcareDocs = Get-ChildItem -Path $healthcareDir -File -ErrorAction SilentlyContinue
-$financeDocs = Get-ChildItem -Path $financeDir -File -ErrorAction SilentlyContinue
-
-$totalDocs = 0
-if ($healthcareDocs) { $totalDocs += $healthcareDocs.Count }
-if ($financeDocs) { $totalDocs += $financeDocs.Count }
-
-if ($totalDocs -eq 0) {
-    Write-Host "  No documents found. Add files to:" -ForegroundColor Yellow
-    Write-Host "    - $healthcareDir" -ForegroundColor Gray
-    Write-Host "    - $financeDir" -ForegroundColor Gray
+if ($Rebuild) {
+    docker compose up -d --build
 } else {
-    Write-Host "  Found $totalDocs document(s)" -ForegroundColor Green
+    docker compose up -d
+}
 
-    # Check if we need to ingest
-    $shouldIngest = $IngestOnly
-    if (-not $shouldIngest) {
-        $response = Read-Host "  Do you want to (re)ingest documents? [y/N]"
-        $shouldIngest = $response -eq "y" -or $response -eq "Y"
-    }
+# Wait for services to be healthy
+Write-Host "`nWaiting for services to initialize..." -ForegroundColor Yellow
+$maxWait = 60
+$waited = 0
+$healthy = $false
 
-    if ($shouldIngest) {
-        Write-Host "  Running document ingestion..." -ForegroundColor Gray
-        Push-Location $scriptDir
-        python ingest.py
-        Pop-Location
+while ($waited -lt $maxWait) {
+    Start-Sleep -Seconds 2
+    $waited += 2
+
+    try {
+        $health = Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get -TimeoutSec 2 -ErrorAction SilentlyContinue
+        if ($health.status -eq "healthy") {
+            $healthy = $true
+            break
+        }
+    } catch {
+        Write-Host "." -NoNewline -ForegroundColor Gray
     }
 }
 
-if ($IngestOnly) {
-    Write-Host ""
-    Write-Host "Ingestion complete. Exiting (--IngestOnly flag)" -ForegroundColor Green
-    exit 0
+Write-Host ""
+
+if ($healthy) {
+    Write-Host "`n================================================" -ForegroundColor Green
+    Write-Host "  RAG Stack Ready!" -ForegroundColor Green
+    Write-Host "================================================" -ForegroundColor Green
+} else {
+    Write-Host "`nWarning: Services may still be starting." -ForegroundColor Yellow
+    Write-Host "Check logs with: docker logs rag-server" -ForegroundColor Yellow
 }
 
-# Start RAG server
 Write-Host ""
-Write-Host "[5/5] Starting RAG server..." -ForegroundColor Yellow
-Write-Host "  Server will run at http://localhost:8000" -ForegroundColor Green
+Write-Host "  RAG Admin UI:     http://localhost:8501" -ForegroundColor Cyan
+Write-Host "  RAG API:          http://localhost:8000" -ForegroundColor Cyan
+Write-Host "  Qdrant Dashboard: http://localhost:6333/dashboard" -ForegroundColor Cyan
+Write-Host "  Open WebUI:       http://localhost:3000" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "================================================" -ForegroundColor Cyan
-Write-Host "  RAG Stack Ready!" -ForegroundColor Cyan
-Write-Host "================================================" -ForegroundColor Cyan
+Write-Host "  Foundry Port: $foundryPort" -ForegroundColor Gray
+Write-Host "  Model: $Model" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  Qdrant:      http://localhost:6333" -ForegroundColor White
-Write-Host "  RAG Server:  http://localhost:8000" -ForegroundColor White
-Write-Host "  Open WebUI:  http://localhost:3000" -ForegroundColor White
+Write-Host "To test the RAG API:" -ForegroundColor Yellow
+Write-Host '  curl -X POST http://localhost:8000/query -H "Content-Type: application/json" -d "{\"query\": \"summarize my resume\", \"category\": \"job-search\"}"' -ForegroundColor Gray
 Write-Host ""
-Write-Host "  API Endpoints:" -ForegroundColor Gray
-Write-Host "    POST /query   - Ask questions about your documents" -ForegroundColor Gray
-Write-Host "    POST /search  - Semantic search (no LLM)" -ForegroundColor Gray
-Write-Host "    GET  /health  - Health check" -ForegroundColor Gray
-Write-Host "    GET  /stats   - Collection statistics" -ForegroundColor Gray
-Write-Host ""
-Write-Host "  Press Ctrl+C to stop the server" -ForegroundColor Yellow
-Write-Host ""
-
-Push-Location $scriptDir
-python rag_server.py
-Pop-Location
+Write-Host "To restart after Foundry port changes:" -ForegroundColor Yellow
+Write-Host "  ./start-rag.ps1 -Restart" -ForegroundColor Gray

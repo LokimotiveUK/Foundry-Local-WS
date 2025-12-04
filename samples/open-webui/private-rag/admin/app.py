@@ -5,11 +5,12 @@ A Streamlit-based admin interface for managing RAG documents.
 - Upload new documents (PDF, TXT, MD, DOCX)
 - View indexed documents
 - Delete documents from the vector store
+- Create and manage custom categories
 - Re-index all documents
 - View collection statistics
 """
 
-import hashlib
+import json
 import os
 import shutil
 from pathlib import Path
@@ -26,12 +27,66 @@ QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 RAG_SERVER = os.getenv("RAG_SERVER", "http://localhost:8000")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "private_docs")
 DOCUMENTS_DIR = Path(os.getenv("DOCUMENTS_DIR", "/app/documents"))
+CATEGORIES_FILE = Path(os.getenv("CATEGORIES_FILE", "/app/categories.json"))
 
-# Ensure directories exist
-HEALTHCARE_DIR = DOCUMENTS_DIR / "healthcare"
-FINANCE_DIR = DOCUMENTS_DIR / "finance"
-HEALTHCARE_DIR.mkdir(parents=True, exist_ok=True)
-FINANCE_DIR.mkdir(parents=True, exist_ok=True)
+# Default categories
+DEFAULT_CATEGORIES = {
+    "healthcare": {
+        "description": "Medical records, lab results, prescriptions, doctor notes",
+        "icon": "🏥",
+        "system_prompt": """You are a helpful assistant analyzing personal healthcare documents.
+Be precise with medical terminology and dates. If you're unsure about something, say so.
+Never provide medical advice - only summarize and explain the documents provided."""
+    },
+    "finance": {
+        "description": "Bank statements, tax returns, investment reports, receipts",
+        "icon": "💰",
+        "system_prompt": """You are a helpful assistant analyzing personal financial documents.
+Be precise with numbers and dates. Always clarify which document a figure comes from.
+Never provide financial advice - only summarize and explain the documents provided."""
+    }
+}
+
+# Common icons for category selection
+CATEGORY_ICONS = ["📁", "🏥", "💰", "💼", "🔍", "📚", "🎓", "🏠", "🚗", "✈️", "🍽️", "🛒", "📝", "⚖️", "🔧", "💻"]
+
+
+def load_categories() -> dict:
+    """Load categories from JSON file."""
+    if CATEGORIES_FILE.exists():
+        try:
+            with open(CATEGORIES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    return DEFAULT_CATEGORIES.copy()
+
+
+def save_categories(categories: dict) -> bool:
+    """Save categories to JSON file."""
+    try:
+        # Ensure we don't save path objects
+        save_data = {}
+        for name, info in categories.items():
+            save_data[name] = {
+                "description": info.get("description", ""),
+                "icon": info.get("icon", "📁"),
+                "system_prompt": info.get("system_prompt", "You are a helpful assistant.")
+            }
+        with open(CATEGORIES_FILE, "w", encoding="utf-8") as f:
+            json.dump(save_data, f, indent=2, ensure_ascii=False)
+        return True
+    except IOError as e:
+        st.error(f"Failed to save categories: {e}")
+        return False
+
+
+def ensure_category_dirs(categories: dict):
+    """Ensure all category directories exist."""
+    DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    for name in categories:
+        (DOCUMENTS_DIR / name).mkdir(exist_ok=True)
+
 
 # Page config
 st.set_page_config(
@@ -65,6 +120,13 @@ st.markdown("""
         font-size: 0.9rem;
         opacity: 0.9;
     }
+    .category-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        background: #fafafa;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -93,7 +155,6 @@ def get_indexed_documents():
     """Get list of unique documents in the collection."""
     try:
         client = get_qdrant_client()
-        # Scroll through all points to get unique documents
         documents = {}
         offset = None
 
@@ -165,20 +226,21 @@ def delete_all_vectors():
         return False
 
 
-def get_local_files():
+def get_local_files(categories: dict):
     """Get list of files in the documents directory."""
     files = []
-    for category_dir in [HEALTHCARE_DIR, FINANCE_DIR]:
-        category = category_dir.name
-        for f in category_dir.iterdir():
-            if f.is_file() and not f.name.startswith('.'):
-                files.append({
-                    "name": f.name,
-                    "path": str(f.relative_to(DOCUMENTS_DIR.parent)),
-                    "category": category,
-                    "size": f.stat().st_size,
-                    "modified": datetime.fromtimestamp(f.stat().st_mtime)
-                })
+    for category_name in categories:
+        category_dir = DOCUMENTS_DIR / category_name
+        if category_dir.exists():
+            for f in category_dir.iterdir():
+                if f.is_file() and not f.name.startswith('.'):
+                    files.append({
+                        "name": f.name,
+                        "path": str(f.relative_to(DOCUMENTS_DIR.parent)),
+                        "category": category_name,
+                        "size": f.stat().st_size,
+                        "modified": datetime.fromtimestamp(f.stat().st_mtime)
+                    })
     return files
 
 
@@ -192,9 +254,13 @@ def trigger_ingestion():
         return False
 
 
+# Load categories
+categories = load_categories()
+ensure_category_dirs(categories)
+
 # Main UI
 st.title("📁 Private RAG Document Manager")
-st.markdown("Manage your healthcare and finance documents for local AI search.")
+st.markdown("Manage your private documents for local AI search.")
 
 # Sidebar - Stats
 with st.sidebar:
@@ -229,8 +295,16 @@ with st.sidebar:
             st.session_state.confirm_clear = True
             st.warning("Click again to confirm deletion")
 
+    st.divider()
+
+    # Categories summary
+    st.header("📂 Categories")
+    for name, info in categories.items():
+        icon = info.get("icon", "📁")
+        st.write(f"{icon} **{name}**")
+
 # Main content tabs
-tab1, tab2, tab3 = st.tabs(["📤 Upload", "📋 Indexed Documents", "📁 Local Files"])
+tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload", "📋 Indexed Documents", "📁 Local Files", "⚙️ Categories"])
 
 # Tab 1: Upload
 with tab1:
@@ -247,9 +321,10 @@ with tab1:
         )
 
     with col2:
+        category_names = list(categories.keys())
         category = st.selectbox(
             "Category",
-            ["healthcare", "finance"],
+            category_names,
             help="Where to store the documents"
         )
 
@@ -262,7 +337,8 @@ with tab1:
 
         with col1:
             if st.button("💾 Save Files", type="primary", use_container_width=True):
-                target_dir = HEALTHCARE_DIR if category == "healthcare" else FINANCE_DIR
+                target_dir = DOCUMENTS_DIR / category
+                target_dir.mkdir(exist_ok=True)
                 saved = 0
                 for uploaded_file in uploaded_files:
                     file_path = target_dir / uploaded_file.name
@@ -274,7 +350,8 @@ with tab1:
 
         with col2:
             if st.button("💾 Save & Ingest", use_container_width=True):
-                target_dir = HEALTHCARE_DIR if category == "healthcare" else FINANCE_DIR
+                target_dir = DOCUMENTS_DIR / category
+                target_dir.mkdir(exist_ok=True)
                 saved = 0
                 for uploaded_file in uploaded_files:
                     file_path = target_dir / uploaded_file.name
@@ -299,80 +376,76 @@ with tab2:
         st.info("No documents indexed yet. Upload files and run ingestion.")
     else:
         # Group by category
-        healthcare_docs = [d for d in indexed_docs if d["category"] == "healthcare"]
-        finance_docs = [d for d in indexed_docs if d["category"] == "finance"]
+        docs_by_category = {}
+        for doc in indexed_docs:
+            cat = doc["category"]
+            if cat not in docs_by_category:
+                docs_by_category[cat] = []
+            docs_by_category[cat].append(doc)
 
-        col1, col2 = st.columns(2)
+        # Create columns based on number of categories (max 3 per row)
+        cat_names = list(docs_by_category.keys())
+        num_cols = min(len(cat_names), 3)
+        cols = st.columns(num_cols) if num_cols > 0 else [st]
 
-        with col1:
-            st.subheader(f"🏥 Healthcare ({len(healthcare_docs)})")
-            for doc in healthcare_docs:
-                with st.container():
-                    cols = st.columns([4, 1, 1])
-                    cols[0].write(f"**{doc['name']}**")
-                    cols[1].write(f"{doc['chunks']} chunks")
-                    if cols[2].button("🗑️", key=f"del_{doc['path']}", help="Delete from index"):
-                        if delete_document_vectors(doc["path"]):
-                            st.success(f"Removed {doc['name']} from index")
-                            st.rerun()
+        for i, cat_name in enumerate(cat_names):
+            cat_info = categories.get(cat_name, {"icon": "📁"})
+            icon = cat_info.get("icon", "📁")
+            docs = docs_by_category[cat_name]
 
-        with col2:
-            st.subheader(f"💰 Finance ({len(finance_docs)})")
-            for doc in finance_docs:
-                with st.container():
-                    cols = st.columns([4, 1, 1])
-                    cols[0].write(f"**{doc['name']}**")
-                    cols[1].write(f"{doc['chunks']} chunks")
-                    if cols[2].button("🗑️", key=f"del_{doc['path']}", help="Delete from index"):
-                        if delete_document_vectors(doc["path"]):
-                            st.success(f"Removed {doc['name']} from index")
-                            st.rerun()
+            with cols[i % num_cols]:
+                st.subheader(f"{icon} {cat_name.title()} ({len(docs)})")
+                for doc in docs:
+                    with st.container():
+                        doc_cols = st.columns([4, 1, 1])
+                        doc_cols[0].write(f"**{doc['name']}**")
+                        doc_cols[1].write(f"{doc['chunks']} chunks")
+                        if doc_cols[2].button("🗑️", key=f"del_{doc['path']}", help="Delete from index"):
+                            if delete_document_vectors(doc["path"]):
+                                st.success(f"Removed {doc['name']} from index")
+                                st.rerun()
 
 # Tab 3: Local Files
 with tab3:
     st.header("Local Files")
     st.caption("Files in the documents folder (may or may not be indexed)")
 
-    local_files = get_local_files()
+    local_files = get_local_files(categories)
 
     if not local_files:
         st.info("No files in documents folder. Upload some documents!")
     else:
-        col1, col2 = st.columns(2)
+        # Group by category
+        files_by_category = {}
+        for f in local_files:
+            cat = f["category"]
+            if cat not in files_by_category:
+                files_by_category[cat] = []
+            files_by_category[cat].append(f)
 
-        healthcare_files = [f for f in local_files if f["category"] == "healthcare"]
-        finance_files = [f for f in local_files if f["category"] == "finance"]
+        cat_names = list(files_by_category.keys())
+        num_cols = min(len(cat_names), 3)
+        cols = st.columns(num_cols) if num_cols > 0 else [st]
 
-        with col1:
-            st.subheader(f"🏥 Healthcare ({len(healthcare_files)})")
-            for f in healthcare_files:
-                with st.container():
-                    cols = st.columns([4, 2, 1])
-                    cols[0].write(f"**{f['name']}**")
-                    cols[1].write(f"{f['size']:,} bytes")
-                    if cols[2].button("🗑️", key=f"file_{f['path']}", help="Delete file"):
-                        file_path = DOCUMENTS_DIR.parent / f["path"]
-                        if file_path.exists():
-                            file_path.unlink()
-                            # Also remove from index
-                            delete_document_vectors(f["path"])
-                            st.success(f"Deleted {f['name']}")
-                            st.rerun()
+        for i, cat_name in enumerate(cat_names):
+            cat_info = categories.get(cat_name, {"icon": "📁"})
+            icon = cat_info.get("icon", "📁")
+            files = files_by_category[cat_name]
 
-        with col2:
-            st.subheader(f"💰 Finance ({len(finance_files)})")
-            for f in finance_files:
-                with st.container():
-                    cols = st.columns([4, 2, 1])
-                    cols[0].write(f"**{f['name']}**")
-                    cols[1].write(f"{f['size']:,} bytes")
-                    if cols[2].button("🗑️", key=f"file_{f['path']}", help="Delete file"):
-                        file_path = DOCUMENTS_DIR.parent / f["path"]
-                        if file_path.exists():
-                            file_path.unlink()
-                            delete_document_vectors(f["path"])
-                            st.success(f"Deleted {f['name']}")
-                            st.rerun()
+            with cols[i % num_cols]:
+                st.subheader(f"{icon} {cat_name.title()} ({len(files)})")
+                for f in files:
+                    with st.container():
+                        file_cols = st.columns([4, 2, 1])
+                        file_cols[0].write(f"**{f['name']}**")
+                        file_cols[1].write(f"{f['size']:,} bytes")
+                        if file_cols[2].button("🗑️", key=f"file_{f['path']}", help="Delete file"):
+                            file_path = DOCUMENTS_DIR.parent / f["path"]
+                            if file_path.exists():
+                                file_path.unlink()
+                                delete_document_vectors(f["path"])
+                                st.success(f"Deleted {f['name']}")
+                                st.rerun()
 
     st.divider()
 
@@ -384,6 +457,115 @@ with tab3:
                 st.rerun()
             else:
                 st.error("Ingestion failed. Check RAG server logs.")
+
+# Tab 4: Categories
+with tab4:
+    st.header("⚙️ Manage Categories")
+    st.caption("Create custom categories for organizing your documents")
+
+    # Add new category
+    st.subheader("➕ Add New Category")
+
+    with st.form("new_category_form"):
+        col1, col2 = st.columns([3, 1])
+
+        with col1:
+            new_name = st.text_input(
+                "Category Name",
+                placeholder="e.g., job-search, recipes, travel",
+                help="Use lowercase letters and hyphens. Spaces will be converted to hyphens."
+            )
+
+        with col2:
+            new_icon = st.selectbox("Icon", CATEGORY_ICONS, index=0)
+
+        new_description = st.text_input(
+            "Description",
+            placeholder="e.g., Resumes, cover letters, job applications",
+            help="Brief description of what documents this category contains"
+        )
+
+        new_prompt = st.text_area(
+            "System Prompt (optional)",
+            placeholder="Custom instructions for the AI when answering questions about these documents...",
+            help="Leave blank for a default prompt"
+        )
+
+        submitted = st.form_submit_button("Create Category", type="primary")
+
+        if submitted:
+            if not new_name:
+                st.error("Please enter a category name")
+            else:
+                # Normalize name
+                normalized_name = new_name.lower().strip().replace(" ", "-").replace("_", "-")
+
+                if normalized_name in categories:
+                    st.error(f"Category '{normalized_name}' already exists")
+                else:
+                    # Create the category
+                    if not new_prompt:
+                        new_prompt = f"""You are a helpful assistant analyzing personal {normalized_name} documents.
+Be precise with details and dates. Always clarify which document information comes from.
+Only answer based on the provided context. If the answer isn't in the context, say so."""
+
+                    categories[normalized_name] = {
+                        "description": new_description,
+                        "icon": new_icon,
+                        "system_prompt": new_prompt
+                    }
+
+                    # Create directory
+                    (DOCUMENTS_DIR / normalized_name).mkdir(exist_ok=True)
+
+                    # Save categories
+                    if save_categories(categories):
+                        st.success(f"Created category: {new_icon} {normalized_name}")
+                        st.rerun()
+                    else:
+                        st.error("Failed to save category")
+
+    st.divider()
+
+    # Existing categories
+    st.subheader("📂 Existing Categories")
+
+    for name, info in categories.items():
+        icon = info.get("icon", "📁")
+        description = info.get("description", "No description")
+
+        with st.expander(f"{icon} **{name}** - {description}"):
+            st.write(f"**Description:** {description}")
+            st.write(f"**Directory:** `documents/{name}/`")
+
+            # Show system prompt
+            with st.container():
+                st.write("**System Prompt:**")
+                st.code(info.get("system_prompt", "Default prompt"), language=None)
+
+            # Delete button (only for non-default categories or if empty)
+            category_dir = DOCUMENTS_DIR / name
+            file_count = len(list(category_dir.glob("*"))) if category_dir.exists() else 0
+
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.caption(f"{file_count} file(s) in this category")
+
+            with col2:
+                if file_count == 0:
+                    if st.button("🗑️ Delete", key=f"delcat_{name}", type="secondary"):
+                        del categories[name]
+                        if save_categories(categories):
+                            # Remove directory if empty
+                            if category_dir.exists():
+                                try:
+                                    category_dir.rmdir()
+                                except OSError:
+                                    pass  # Directory not empty
+                            st.success(f"Deleted category: {name}")
+                            st.rerun()
+                else:
+                    st.caption("Remove files first")
 
 # Footer
 st.divider()

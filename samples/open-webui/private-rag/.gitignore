@@ -1,0 +1,19 @@
+# User documents (contain personal/sensitive information)
+documents/healthcare/*.pdf
+documents/healthcare/*.txt
+documents/finance/*.pdf
+documents/finance/*.txt
+documents/job-search/*.pdf
+documents/job-search/*.txt
+documents/*/*.docx
+
+# Keep directory structure with .gitkeep files
+!documents/*/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.env
+
+# Local embedding cache
+.cache/

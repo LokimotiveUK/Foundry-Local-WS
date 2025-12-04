@@ -6,7 +6,10 @@
 #   - rag-server: RAG API server (port 8000)
 #   - rag-admin:  Document management UI (port 8501)
 #
-# Usage:
+# Usage (recommended - auto-detects Foundry port):
+#   ./start-rag.ps1
+#
+# Manual usage:
 #   docker compose up -d
 #
 # Access:
@@ -39,6 +42,7 @@ services:
       - "8000:8000"
     volumes:
       - ./documents:/app/documents:ro
+      - ./categories.json:/app/categories.json
       - embedding_cache:/app/.cache
     environment:
       - QDRANT_HOST=qdrant
@@ -46,7 +50,9 @@ services:
       - COLLECTION_NAME=private_docs
       - EMBEDDING_MODEL=all-MiniLM-L6-v2
       # Foundry runs on host, access via host.docker.internal
-      - FOUNDRY_ENDPOINT=http://host.docker.internal:5273/v1
+      # Port is auto-detected by start-rag.ps1, or set FOUNDRY_PORT env var
+      - FOUNDRY_ENDPOINT=http://host.docker.internal:${FOUNDRY_PORT:-5273}/v1
+      - FOUNDRY_MODEL=${FOUNDRY_MODEL:-phi-3.5-mini}
     depends_on:
       - qdrant
     extra_hosts:
@@ -63,12 +69,14 @@ services:
       - "8501:8501"
     volumes:
       - ./documents:/app/documents
+      - ./categories.json:/app/categories.json
     environment:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - RAG_SERVER=http://rag-server:8000
       - COLLECTION_NAME=private_docs
       - DOCUMENTS_DIR=/app/documents
+      - CATEGORIES_FILE=/app/categories.json
     depends_on:
       - qdrant
       - rag-server

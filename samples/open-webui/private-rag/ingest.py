@@ -126,9 +126,9 @@ def ingest_documents():
 
     if not documents:
         print(f"\n[!] No documents found in {config.DOCUMENTS_DIR}")
-        print(f"    Add .txt, .md, .pdf, or .docx files to:")
-        print(f"    - {config.HEALTHCARE_DIR}")
-        print(f"    - {config.FINANCE_DIR}")
+        print(f"    Add .txt, .md, .pdf, or .docx files to category folders:")
+        for cat_name in config.CATEGORIES:
+            print(f"    - documents/{cat_name}/")
         return
 
     print(f"\nFound {len(documents)} documents to process:")
