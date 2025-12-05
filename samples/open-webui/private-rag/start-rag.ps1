@@ -45,7 +45,7 @@ try {
     exit 1
 }
 
-# Check if Foundry is running and get the port
+# Check if Foundry is running and detect port
 Write-Host "`n[2/4] Detecting Foundry Local..." -ForegroundColor Yellow
 $foundryStatus = & foundry service status 2>&1 | Out-String
 
@@ -57,18 +57,26 @@ if ($foundryStatus -match "not running") {
 }
 
 # Extract port from status - look for port number after localhost or 127.0.0.1
-$foundryPort = "5273"  # default
+$foundryPort = $null
 if ($foundryStatus -match "127\.0\.0\.1:(\d+)" -or $foundryStatus -match "localhost:(\d+)") {
     $foundryPort = $Matches[1]
-    Write-Host "  Foundry Local running on port: $foundryPort" -ForegroundColor Green
-} elseif ($foundryStatus -match ":(\d{5})") {
-    # Fallback: look for any 5-digit port number (Foundry uses high ports like 51413)
+} elseif ($foundryStatus -match ":(\d{4,5})") {
+    # Fallback: look for any 4-5 digit port number
     $foundryPort = $Matches[1]
-    Write-Host "  Foundry Local running on port: $foundryPort" -ForegroundColor Green
+}
+
+if ($foundryPort) {
+    # Verify the port is responding
+    try {
+        $null = Invoke-RestMethod -Uri "http://localhost:$foundryPort/v1/models" -TimeoutSec 3 -ErrorAction Stop
+        Write-Host "  Foundry Local running on port: $foundryPort" -ForegroundColor Green
+    } catch {
+        Write-Host "  Port $foundryPort detected but not responding, will auto-detect in container" -ForegroundColor Yellow
+        $foundryPort = "0"
+    }
 } else {
-    Write-Host "  Could not detect Foundry port from status output." -ForegroundColor Yellow
-    Write-Host "  Status: $foundryStatus" -ForegroundColor Gray
-    Write-Host "  Using default: $foundryPort" -ForegroundColor Yellow
+    Write-Host "  Could not detect Foundry port, will auto-detect in container" -ForegroundColor Yellow
+    $foundryPort = "0"
 }
 
 # Set environment variable for docker compose

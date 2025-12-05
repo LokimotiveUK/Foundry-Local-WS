@@ -1,13 +1,12 @@
 # Open WebUI with Foundry Local
 #
-# This stack automatically handles Foundry's dynamic ports.
-# Just run: docker compose up -d
+# Foundry port: Uses FOUNDRY_PORT env var (default: auto-detect)
+# Set a fixed port with: $env:FOUNDRY_PORT = "51413"; docker compose up -d
 #
-# The foundry-proxy service auto-discovers Foundry's port and provides
-# a stable endpoint for Open WebUI.
+# Just run: docker compose up -d
 
 services:
-  # Foundry Proxy - auto-discovers Foundry's dynamic port
+  # Foundry Proxy - auto-discovers Foundry's port with optional fixed port preference
   foundry-proxy:
     build:
       context: ./foundry-proxy
@@ -16,6 +15,9 @@ services:
     restart: unless-stopped
     ports:
       - "5999:8080"  # Exposed for debugging, not required
+    environment:
+      # Optional: Set FOUNDRY_PORT to prefer a specific port (falls back to auto-detect)
+      - FOUNDRY_PORT=${FOUNDRY_PORT:-0}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -26,8 +28,8 @@ services:
       start_period: 10s
 
   # Open WebUI - ChatGPT-like interface
-  open-webui:
-    container_name: open-webui
+  open-webui-foundry:
+    container_name: open-webui-foundry
     image: ghcr.io/open-webui/open-webui:main
     restart: unless-stopped
     ports:

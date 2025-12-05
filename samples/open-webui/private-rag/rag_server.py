@@ -67,6 +67,10 @@ _foundry_port_cache = None
 _foundry_port_cache_time = 0
 _FOUNDRY_CACHE_TTL = 30  # Re-detect every 30 seconds
 
+# Optional preferred port from environment (0 = auto-detect only)
+_env_port_str = os.getenv("FOUNDRY_PORT", "0")
+PREFERRED_PORT = int(_env_port_str) if _env_port_str.isdigit() else 0
+
 
 def _probe_foundry_port(host: str, port: int) -> bool:
     """Check if Foundry is responding on a specific port."""
@@ -76,7 +80,7 @@ def _probe_foundry_port(host: str, port: int) -> bool:
         response = conn.getresponse()
         data = response.read().decode()
         conn.close()
-        return "model" in data.lower()
+        return "model" in data.lower() or "data" in data.lower()
     except:
         return False
 
@@ -89,12 +93,15 @@ def _detect_foundry_port(host: str) -> int:
     if _foundry_port_cache and _probe_foundry_port(host, _foundry_port_cache):
         return _foundry_port_cache
 
-    # Probe common Foundry port ranges
+    # Probe common Foundry port ranges (ordered by likelihood)
     probe_ranges = [
-        range(50400, 50450),   # Common range
-        range(50000, 50050),
-        range(51400, 51450),
+        range(52400, 52500),   # Includes 52413 (common fixed port)
+        range(50400, 50500),   # Most common dynamic range
+        range(51400, 51500),
+        range(62600, 62700),
         range(62800, 62900),
+        range(50000, 50100),
+        range(57500, 57600),
         range(5273, 5280),     # Default range
     ]
 
@@ -112,8 +119,11 @@ def _detect_foundry_port(host: str) -> int:
 def get_foundry_endpoint(refresh: bool = False) -> str:
     """Get the Foundry Local endpoint (auto-detects dynamic port).
 
-    When running in Docker, we need to use host.docker.internal to reach
-    Foundry Local running on the host machine.
+    Port Discovery Strategy:
+    1. If FOUNDRY_PORT env var is set and > 0, try that port first
+    2. Check FOUNDRY_ENDPOINT env var if set
+    3. Check cached port from last successful discovery
+    4. Scan common Foundry port ranges to find the service
 
     Args:
         refresh: If True, ignore cached endpoint and re-detect
@@ -124,29 +134,47 @@ def get_foundry_endpoint(refresh: bool = False) -> str:
     is_docker = os.path.exists("/.dockerenv") or os.getenv("DOCKER_CONTAINER")
     host = "host.docker.internal" if is_docker else "localhost"
 
-    # Check for environment variable override first (but verify it works)
+    # 1. Try preferred port first (if configured and > 0)
+    if PREFERRED_PORT > 0 and not refresh:
+        if _probe_foundry_port(host, PREFERRED_PORT):
+            if _foundry_port_cache != PREFERRED_PORT:
+                logger.info(f"Using preferred FOUNDRY_PORT: {PREFERRED_PORT}")
+            _foundry_port_cache = PREFERRED_PORT
+            _foundry_port_cache_time = time.time()
+            return f"http://{host}:{PREFERRED_PORT}/v1"
+
+    # 2. Check for FOUNDRY_ENDPOINT environment variable
     env_endpoint = os.getenv("FOUNDRY_ENDPOINT")
     if env_endpoint and not refresh:
-        # Verify the endpoint is actually responding
         try:
-            # Extract port from endpoint
             import re
             match = re.search(r':(\d+)', env_endpoint)
             if match:
                 port = int(match.group(1))
                 if _probe_foundry_port(host, port):
+                    logger.info(f"Using FOUNDRY_ENDPOINT: {env_endpoint}")
+                    _foundry_port_cache = port
+                    _foundry_port_cache_time = time.time()
                     return env_endpoint
-                else:
-                    logger.warning(f"FOUNDRY_ENDPOINT {env_endpoint} not responding, auto-detecting...")
         except:
             pass
 
-    # Return cached endpoint if valid, recent, and still working
-    if not refresh and foundry_endpoint and (time.time() - _foundry_port_cache_time) < _FOUNDRY_CACHE_TTL:
-        return foundry_endpoint
+    # 3. Return cached endpoint if valid, recent, and still working
+    if not refresh and _foundry_port_cache and (time.time() - _foundry_port_cache_time) < _FOUNDRY_CACHE_TTL:
+        if _probe_foundry_port(host, _foundry_port_cache):
+            return f"http://{host}:{_foundry_port_cache}/v1"
 
-    # Auto-detect Foundry port by probing
-    logger.info("Auto-detecting Foundry port...")
+    # 4. Re-check cached port even if TTL expired
+    if _foundry_port_cache and _probe_foundry_port(host, _foundry_port_cache):
+        _foundry_port_cache_time = time.time()
+        return f"http://{host}:{_foundry_port_cache}/v1"
+
+    # 5. Auto-detect Foundry port by scanning
+    if PREFERRED_PORT > 0:
+        logger.warning(f"Preferred port {PREFERRED_PORT} not responding, scanning...")
+    else:
+        logger.info("Auto-detecting Foundry port...")
+
     port = _detect_foundry_port(host)
 
     if port:

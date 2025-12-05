@@ -4,6 +4,11 @@ Foundry Proxy - Auto-discovers Foundry Local's dynamic port and proxies requests
 
 This runs as a Docker service and provides a stable endpoint (port 8080) that
 automatically finds and forwards to Foundry's actual dynamic port.
+
+Port Discovery Strategy:
+1. If FOUNDRY_PORT env var is set and > 0, try that port first
+2. Check cached port from last successful discovery
+3. Scan common Foundry port ranges to find the service
 """
 
 import http.client
@@ -22,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 # Foundry host from Docker's perspective
 FOUNDRY_HOST = os.getenv("FOUNDRY_HOST", "host.docker.internal")
+
+# Optional preferred port (0 = auto-detect only)
+_env_port = os.getenv("FOUNDRY_PORT", "0")
+PREFERRED_PORT = int(_env_port) if _env_port.isdigit() else 0
 
 # Cache for port discovery
 _cached_port = None
@@ -43,30 +52,44 @@ def probe_port(host: str, port: int) -> bool:
 
 
 def discover_foundry_port() -> int:
-    """Discover Foundry's current dynamic port."""
+    """Discover Foundry's current port with fallback scanning."""
     global _cached_port, _cache_time
 
-    # Return cached port if valid and still responding
+    # 1. Try preferred port first (if configured)
+    if PREFERRED_PORT > 0:
+        if probe_port(FOUNDRY_HOST, PREFERRED_PORT):
+            if _cached_port != PREFERRED_PORT:
+                logger.info(f"Using preferred port {PREFERRED_PORT}")
+            _cached_port = PREFERRED_PORT
+            _cache_time = time.time()
+            return PREFERRED_PORT
+
+    # 2. Check cached port (might have just expired but still valid)
     if _cached_port and (time.time() - _cache_time) < CACHE_TTL:
         if probe_port(FOUNDRY_HOST, _cached_port):
             return _cached_port
 
-    # Check cached port first (might have just expired but still valid)
+    # 3. Re-check cached port even if TTL expired (port might not have changed)
     if _cached_port and probe_port(FOUNDRY_HOST, _cached_port):
         _cache_time = time.time()
         return _cached_port
 
-    # Probe common Foundry port ranges
-    port_ranges = [
-        range(50400, 50500),  # Most common range
-        range(50000, 50100),
-        range(51400, 51500),
-        range(62800, 62900),
-        range(5273, 5280),    # Default port
-        range(57500, 57600),
-    ]
+    # 4. Scan for Foundry on common port ranges
+    if PREFERRED_PORT > 0:
+        logger.warning(f"Preferred port {PREFERRED_PORT} not responding, scanning...")
+    else:
+        logger.info("Scanning for Foundry port...")
 
-    logger.info(f"Scanning for Foundry on {FOUNDRY_HOST}...")
+    port_ranges = [
+        range(52400, 52500),   # Includes 52413 (common fixed port)
+        range(50400, 50500),   # Most common dynamic range
+        range(51400, 51500),   # Another common range
+        range(62600, 62700),
+        range(62800, 62900),
+        range(50000, 50100),
+        range(57500, 57600),
+        range(5273, 5280),     # Default range
+    ]
 
     for port_range in port_ranges:
         for port in port_range:
@@ -182,6 +205,12 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
 def main():
     port = int(os.getenv("PROXY_PORT", "8080"))
 
+    # Log configuration
+    if PREFERRED_PORT > 0:
+        logger.info(f"Preferred Foundry port: {PREFERRED_PORT}")
+    else:
+        logger.info("No preferred port set - will auto-detect")
+
     # Initial discovery
     foundry_port = discover_foundry_port()
     if foundry_port:
@@ -192,7 +221,7 @@ def main():
     # Start server
     server = http.server.HTTPServer(("0.0.0.0", port), ProxyHandler)
     logger.info(f"Foundry Proxy listening on port {port}")
-    logger.info(f"Proxying to {FOUNDRY_HOST}:<dynamic-port>")
+    logger.info(f"Proxying to {FOUNDRY_HOST}:<auto-detected port>")
 
     try:
         server.serve_forever()

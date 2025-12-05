@@ -1,5 +1,7 @@
 # Start Local AI Stack - Foundry Local + Open WebUI
 # This script sets up a completely offline AI chat system
+#
+# Foundry port is auto-detected from the running service
 
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host "  Local AI Stack Startup Script" -ForegroundColor Cyan
@@ -51,13 +53,29 @@ Write-Host "[2/5] Detecting Foundry endpoint..." -ForegroundColor Yellow
 $foundryPort = $null
 
 # Parse port from status output like: http://127.0.0.1:53398/openai/status
-if ($serviceStatus -match "http://[^:]+:(\d+)") {
+if ($serviceStatus -match "127\.0\.0\.1:(\d+)" -or $serviceStatus -match "localhost:(\d+)") {
     $foundryPort = $matches[1]
-    Write-Host "  [OK] Foundry running on port $foundryPort" -ForegroundColor Green
+} elseif ($serviceStatus -match "http://[^:]+:(\d+)") {
+    $foundryPort = $matches[1]
+} elseif ($serviceStatus -match ":(\d{4,5})") {
+    # Fallback: look for any 4-5 digit port number
+    $foundryPort = $matches[1]
+}
+
+if ($foundryPort) {
+    # Verify the port is responding
+    try {
+        $null = Invoke-RestMethod -Uri "http://localhost:$foundryPort/v1/models" -TimeoutSec 3 -ErrorAction Stop
+        Write-Host "  [OK] Foundry running on port $foundryPort" -ForegroundColor Green
+    } catch {
+        Write-Host "  [!] Port $foundryPort detected but not responding" -ForegroundColor Yellow
+        Write-Host "  Service status: $serviceStatus" -ForegroundColor Gray
+    }
 } else {
+    Write-Host "  [!] Could not detect Foundry port from status output" -ForegroundColor Yellow
+    Write-Host "  Status: $serviceStatus" -ForegroundColor Gray
     $foundryPort = "5273"
-    Write-Host "  [!] Could not detect port, using default $foundryPort" -ForegroundColor Yellow
-    Write-Host "  Service status was: $serviceStatus" -ForegroundColor Gray
+    Write-Host "  Using default port: $foundryPort" -ForegroundColor Yellow
 }
 
 $foundryUrl = "http://host.docker.internal:$foundryPort/v1"
