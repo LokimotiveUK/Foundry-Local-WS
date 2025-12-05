@@ -45,6 +45,16 @@ Category-specific tools that connect Open WebUI workspaces to your private docum
 
 5. Click **Save**
 
+### Step 2.5: (Optional but recommended) Force the Tool with AutoTool Filter
+
+If your local model sometimes ignores tool instructions, install the AutoTool filter so Open WebUI automatically selects the `job_search_rag` tool whenever the chat mentions resumes/CVs.
+
+1. Go to **Workspace** > **Functions** > **+ Create Function**.
+2. Paste the contents of `samples/open-webui/private-rag/tools/autotool_filter.py`.
+3. Save, then enable the filter for your Job Search Assistant model in the model editor (**Functions** section).
+
+When enabled, this filter pre-processes each user query and injects the `job_search_rag` tool ID whenever the request is about resumes or job applications, guaranteeing the tool executes even if the LLM ignores the prompt.
+
 ### Recommended System Prompt
 
 Use this system prompt for reliable tool calling:
@@ -125,6 +135,10 @@ If the model gives generic advice instead of searching your documents:
 5. **Try a More Explicit Query**:
    - Instead of "Give me feedback on my resume"
    - Try "Search my documents and give me feedback on my resume"
+
+6. **Force tool selection with AutoTool filter**:
+   - Follow the "Step 2.5" instructions above and ensure the filter is enabled for your model.
+   - This guarantees `/api/v1/tools/run` appears in the Open WebUI logs whenever the chat mentions resumes or CVs.
 
 ### "Cannot connect to RAG server"
 ```powershell
