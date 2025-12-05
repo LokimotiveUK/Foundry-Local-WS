@@ -17,10 +17,12 @@ Your Documents (PDF, TXT, MD, DOCX)
    [Qdrant Vector DB] <-- Local embeddings via sentence-transformers
          |
          v
-   [RAG Query Tool] --> Foundry Local LLM --> Open WebUI
+   [RAG Query Tool] --> (auto-discovers port) --> Foundry Local LLM
 ```
 
 **All processing stays 100% on your device. No data leaves your machine.**
+
+The RAG server automatically discovers Foundry Local's dynamic port - no manual configuration needed when Foundry restarts.
 
 ---
 
@@ -249,4 +251,26 @@ Ensure all containers are on the same Docker network:
 ```powershell
 docker compose ps  # Check all services are running
 docker compose logs  # View logs
+```
+
+### RAG queries failing with "LLM generation failed"
+Check the RAG server health endpoint:
+```powershell
+curl http://localhost:8000/health
+```
+
+This shows:
+- `foundry_status`: Whether Foundry was discovered
+- `foundry_endpoint`: The auto-detected Foundry URL
+- `model`: The model being used for generation
+
+If Foundry isn't detected:
+1. Ensure Foundry is running: `foundry service status`
+2. Check RAG server logs: `docker logs rag-server`
+3. The server probes ports 50400-50500, 50000-50100, etc.
+
+### Wrong model being used
+The default model is `qwen2.5-0.5b-instruct-generic-cpu:4`. To change it:
+```powershell
+FOUNDRY_MODEL="phi-3.5-mini" docker compose up -d rag-server
 ```

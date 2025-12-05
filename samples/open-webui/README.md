@@ -9,9 +9,34 @@ This sample shows how to point [Open WebUI](https://github.com/open-webui/open-w
 - At least one chat model available locally (for example `phi-3.5-mini`, `qwen2.5-0.5b`).
 - Docker Desktop (for running Open WebUI container) or another runtime that can host the image `ghcr.io/open-webui/open-webui`.
 
-## Quick Start (Automated)
+## Quick Start (Docker Compose - Recommended)
 
-The fastest way to get everything running:
+The easiest way to get everything running with **automatic port handling**:
+
+```powershell
+cd samples/open-webui
+docker compose up -d
+```
+
+This starts two services:
+- **foundry-proxy**: Auto-discovers Foundry's dynamic port (no manual configuration needed)
+- **open-webui**: ChatGPT-like interface at http://localhost:3000
+
+The proxy automatically detects Foundry's port on every request, so you never need to manually update port numbers when Foundry restarts.
+
+Then browse to `http://localhost:3000` and create your admin account.
+
+### Stop Everything
+
+```powershell
+docker compose down
+```
+
+---
+
+## Alternative: PowerShell Scripts
+
+For more control over the startup process:
 
 ```powershell
 cd samples/open-webui
@@ -25,8 +50,6 @@ This script will:
 - Pull and launch Open WebUI container with the correct port
 - Optionally configure Whisper for speech-to-text
 
-Then browse to `http://localhost:3000` and create your admin account.
-
 For non-interactive automation (CI/CD or scripting):
 ```powershell
 .\start-local-ai-auto.ps1
@@ -37,6 +60,24 @@ For non-interactive automation (CI/CD or scripting):
 To stop everything:
 ```powershell
 .\stop-local-ai.ps1
+```
+
+---
+
+## How the Foundry Proxy Works
+
+Foundry Local uses **dynamic ports** that change on each service restart (e.g., 50402, 62873, 57537). This created a problem where Open WebUI would lose connection after Foundry restarts.
+
+The `foundry-proxy` service solves this by:
+
+1. **Scanning port ranges** (50400-50500, 50000-50050, etc.) to find Foundry
+2. **Caching the discovered port** for 10 seconds for performance
+3. **Auto-retrying** if Foundry moves to a new port
+4. **Providing a stable endpoint** (`foundry-proxy:8080`) for Open WebUI
+
+**Architecture:**
+```
+Open WebUI --> foundry-proxy:8080 --> (auto-discovers) --> Foundry Local:50402
 ```
 
 ---
@@ -57,8 +98,6 @@ foundry model run qwen2.5-0.5b
 foundry service status
 ```
 
-> **Important:** Foundry Local uses a dynamic port that changes on each service restart. The `foundry service status` command shows the current port (e.g., `http://127.0.0.1:57537`). Note this port number for the next step.
-
 ### 2. Launch Open WebUI against Foundry Local
 
 #### Quick `docker run`
@@ -78,19 +117,6 @@ docker run -d --name open-webui --restart=unless-stopped `
 - `host.docker.internal` lets the Linux container reach the Windows host where Foundry Local runs.
 - The API key value is ignored by Foundry Local but Open WebUI expects something non-empty.
 - Mounting `LOCALAPPDATA` keeps your WebUI settings and chats persistent.
-
-#### Docker Compose
-
-This repository includes `samples/open-webui/docker-compose.yml`. Before using it, update the port number in the file to match your Foundry service port:
-
-```powershell
-# First, check your Foundry port
-foundry service status
-
-# Edit docker-compose.yml and update OPENAI_API_BASE_URL with the correct port
-# Then run:
-docker compose up -d
-```
 
 ### 3. Point Open WebUI at your local models
 
@@ -148,6 +174,8 @@ This starts three services:
 | RAG API Server | http://localhost:8000 | Query API for Open WebUI |
 | Qdrant | http://localhost:6333 | Vector database |
 
+The RAG server also auto-discovers Foundry's dynamic port, so no manual configuration is needed.
+
 ### Admin UI Features
 
 The web-based admin UI at **http://localhost:8501** provides:
@@ -188,20 +216,57 @@ docker compose down
 
 See [private-rag/README.md](./private-rag/README.md) for full documentation.
 
+---
+
+## File Structure
+
+```
+open-webui/
+├── README.md                 # This file
+├── docker-compose.yml        # Docker Compose with auto-port proxy
+├── foundry-proxy/            # Auto-discovers Foundry's dynamic port
+│   ├── Dockerfile
+│   └── proxy.py
+├── start-local-ai.ps1        # Interactive startup script
+├── start-local-ai-auto.ps1   # Non-interactive startup
+├── stop-local-ai.ps1         # Stop all services
+└── private-rag/              # Private RAG system
+    ├── README.md
+    ├── docker-compose.yml
+    ├── rag_server.py
+    ├── admin/
+    └── documents/
+```
+
+---
+
 ## Troubleshooting
 
 ### Models not appearing in Open WebUI
 - Check that Foundry is running: `foundry service status`
-- Verify the port in your Open WebUI container matches the Foundry port
-- Restart Open WebUI with the correct port if Foundry was restarted
+- Check the proxy logs: `docker logs foundry-proxy`
+- The proxy scans common port ranges - ensure Foundry is on a standard port
+- Restart the proxy: `docker compose restart foundry-proxy`
 
 ### "Backend Required" error
 - Clear browser cache or use incognito mode
 - Ensure you're accessing `http://localhost:3000` (not https)
 - Wait a few seconds for the container to fully start
 
-### Port mismatch after Foundry restart
-Foundry uses a dynamic port. If you restart the Foundry service, you'll need to restart Open WebUI with the new port. The easiest way is to re-run the startup script:
+### Foundry port not being discovered
+Check the proxy logs to see which port was found:
 ```powershell
-.\start-local-ai.ps1
+docker logs foundry-proxy
 ```
+
+If Foundry is on an unusual port, the proxy will scan these ranges:
+- 50400-50500 (most common)
+- 50000-50100
+- 51400-51500
+- 62800-62900
+- 5273-5280
+
+### RAG queries returning errors
+- Check RAG server health: `curl http://localhost:8000/health`
+- Verify the model is working: The health endpoint shows `foundry_status` and `model`
+- Check logs: `docker logs rag-server`

@@ -1,14 +1,31 @@
-# NOTE: Foundry Local uses a dynamic port that changes on each restart.
-# The PowerShell scripts (start-local-ai.ps1, start-local-ai-auto.ps1)
-# automatically detect the correct port. Using docker-compose requires
-# manually updating the port below.
+# Open WebUI with Foundry Local
 #
-# To find the current Foundry port, run:
-#   foundry service status
+# This stack automatically handles Foundry's dynamic ports.
+# Just run: docker compose up -d
 #
-# Then update OPENAI_API_BASE_URL with the correct port number.
+# The foundry-proxy service auto-discovers Foundry's port and provides
+# a stable endpoint for Open WebUI.
 
 services:
+  # Foundry Proxy - auto-discovers Foundry's dynamic port
+  foundry-proxy:
+    build:
+      context: ./foundry-proxy
+      dockerfile: Dockerfile
+    container_name: foundry-proxy
+    restart: unless-stopped
+    ports:
+      - "5999:8080"  # Exposed for debugging, not required
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/models', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Open WebUI - ChatGPT-like interface
   open-webui:
     container_name: open-webui
     image: ghcr.io/open-webui/open-webui:main
@@ -16,13 +33,14 @@ services:
     ports:
       - "3000:8080"
     environment:
-      # Update the port number below to match your Foundry service port
-      # Run 'foundry service status' to find the current port
-      OPENAI_API_BASE_URL: "http://host.docker.internal:57537/v1"
+      # Connect to the foundry-proxy which handles dynamic ports
+      OPENAI_API_BASE_URL: "http://foundry-proxy:8080/v1"
       OPENAI_API_KEY: "local-key"
-      # Uncomment the next two lines if you also want local speech-to-text via Foundry Local
-      # WHISPER_API_BASE_URL: "http://host.docker.internal:57537/v1"
+      # Speech-to-text via Foundry (if whisper model loaded)
+      # WHISPER_API_BASE_URL: "http://foundry-proxy:8080/v1"
       # WHISPER_API_KEY: "local-key"
+    depends_on:
+      - foundry-proxy
     volumes:
       - type: bind
         source: ${LOCALAPPDATA}/open-webui

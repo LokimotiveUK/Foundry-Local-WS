@@ -30,11 +30,14 @@ CHUNK_OVERLAP = 100  # Overlap for context continuity
 
 # === Retrieval Settings ===
 TOP_K = 5  # Number of chunks to retrieve
-MIN_SCORE = 0.3  # Minimum similarity score (0-1)
+# Qdrant returns relatively low cosine similarity scores (< 0.2) for many
+# sentence-transformer embeddings, so keep the threshold permissive.
+MIN_SCORE = 0.05  # Minimum similarity score (0-1)
 
 # === Foundry Local ===
-# These are auto-detected by the foundry-local-sdk
-FOUNDRY_MODEL = os.getenv("FOUNDRY_MODEL", "phi-3.5-mini")
+# Model name - use full model ID from Foundry (see: foundry model list)
+# qwen2.5-0.5b is small but reliable; phi-3.5-mini is better but may have issues
+FOUNDRY_MODEL = os.getenv("FOUNDRY_MODEL", "qwen2.5-0.5b-instruct-generic-cpu:4")
 
 # === RAG Server ===
 RAG_SERVER_HOST = "0.0.0.0"

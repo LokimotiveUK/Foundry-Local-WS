@@ -6,10 +6,10 @@
 #   - rag-server: RAG API server (port 8000)
 #   - rag-admin:  Document management UI (port 8501)
 #
-# Usage (recommended - auto-detects Foundry port):
-#   ./start-rag.ps1
+# IMPORTANT: Foundry Local uses dynamic ports. Run the proxy first:
+#   python foundry-proxy.py
 #
-# Manual usage:
+# Then start the stack:
 #   docker compose up -d
 #
 # Access:
@@ -49,14 +49,20 @@ services:
       - QDRANT_PORT=6333
       - COLLECTION_NAME=private_docs
       - EMBEDDING_MODEL=all-MiniLM-L6-v2
-      # Foundry runs on host, access via host.docker.internal
-      # Port is auto-detected by start-rag.ps1, or set FOUNDRY_PORT env var
-      - FOUNDRY_ENDPOINT=http://host.docker.internal:${FOUNDRY_PORT:-5273}/v1
-      - FOUNDRY_MODEL=${FOUNDRY_MODEL:-phi-3.5-mini}
+      # Foundry endpoint is AUTO-DETECTED by probing ports
+      # No fixed port needed - the server finds Foundry dynamically
+      - FOUNDRY_MODEL=${FOUNDRY_MODEL:-qwen2.5-0.5b-instruct-generic-cpu:4}
+      - DOCKER_CONTAINER=1
     depends_on:
       - qdrant
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Document Management UI
   rag-admin:

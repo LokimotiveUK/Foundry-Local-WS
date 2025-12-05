@@ -59,37 +59,109 @@ class SearchResponse(BaseModel):
     results: list[dict]
 
 
-def get_foundry_endpoint() -> str:
+import http.client
+import time
+
+# Cache for Foundry port detection
+_foundry_port_cache = None
+_foundry_port_cache_time = 0
+_FOUNDRY_CACHE_TTL = 30  # Re-detect every 30 seconds
+
+
+def _probe_foundry_port(host: str, port: int) -> bool:
+    """Check if Foundry is responding on a specific port."""
+    try:
+        conn = http.client.HTTPConnection(host, port, timeout=2)
+        conn.request("GET", "/v1/models")
+        response = conn.getresponse()
+        data = response.read().decode()
+        conn.close()
+        return "model" in data.lower()
+    except:
+        return False
+
+
+def _detect_foundry_port(host: str) -> int:
+    """Detect Foundry's dynamic port by probing common ranges."""
+    global _foundry_port_cache, _foundry_port_cache_time
+
+    # Check cached port first
+    if _foundry_port_cache and _probe_foundry_port(host, _foundry_port_cache):
+        return _foundry_port_cache
+
+    # Probe common Foundry port ranges
+    probe_ranges = [
+        range(50400, 50450),   # Common range
+        range(50000, 50050),
+        range(51400, 51450),
+        range(62800, 62900),
+        range(5273, 5280),     # Default range
+    ]
+
+    for port_range in probe_ranges:
+        for port in port_range:
+            if _probe_foundry_port(host, port):
+                _foundry_port_cache = port
+                _foundry_port_cache_time = time.time()
+                logger.info(f"Found Foundry on port {port}")
+                return port
+
+    return None
+
+
+def get_foundry_endpoint(refresh: bool = False) -> str:
     """Get the Foundry Local endpoint (auto-detects dynamic port).
 
     When running in Docker, we need to use host.docker.internal to reach
     Foundry Local running on the host machine.
+
+    Args:
+        refresh: If True, ignore cached endpoint and re-detect
     """
-    # Check for environment variable override first
+    global foundry_endpoint, _foundry_port_cache, _foundry_port_cache_time
+
+    # Determine host based on environment
+    is_docker = os.path.exists("/.dockerenv") or os.getenv("DOCKER_CONTAINER")
+    host = "host.docker.internal" if is_docker else "localhost"
+
+    # Check for environment variable override first (but verify it works)
     env_endpoint = os.getenv("FOUNDRY_ENDPOINT")
+    if env_endpoint and not refresh:
+        # Verify the endpoint is actually responding
+        try:
+            # Extract port from endpoint
+            import re
+            match = re.search(r':(\d+)', env_endpoint)
+            if match:
+                port = int(match.group(1))
+                if _probe_foundry_port(host, port):
+                    return env_endpoint
+                else:
+                    logger.warning(f"FOUNDRY_ENDPOINT {env_endpoint} not responding, auto-detecting...")
+        except:
+            pass
+
+    # Return cached endpoint if valid, recent, and still working
+    if not refresh and foundry_endpoint and (time.time() - _foundry_port_cache_time) < _FOUNDRY_CACHE_TTL:
+        return foundry_endpoint
+
+    # Auto-detect Foundry port by probing
+    logger.info("Auto-detecting Foundry port...")
+    port = _detect_foundry_port(host)
+
+    if port:
+        endpoint = f"http://{host}:{port}/v1"
+        logger.info(f"Using Foundry endpoint: {endpoint}")
+        return endpoint
+
+    # Fallback to env or default
     if env_endpoint:
-        logger.info(f"Using FOUNDRY_ENDPOINT from environment: {env_endpoint}")
+        logger.warning(f"Could not detect Foundry, falling back to FOUNDRY_ENDPOINT: {env_endpoint}")
         return env_endpoint
 
-    # Try auto-detection (only works when NOT in Docker)
-    try:
-        from foundry_local import FoundryLocalManager
-        manager = FoundryLocalManager(bootstrap=False)
-        if manager.is_service_running():
-            endpoint = manager.endpoint
-            # If we're in Docker, replace localhost with host.docker.internal
-            if os.path.exists("/.dockerenv") or os.getenv("DOCKER_CONTAINER"):
-                endpoint = endpoint.replace("localhost", "host.docker.internal")
-                endpoint = endpoint.replace("127.0.0.1", "host.docker.internal")
-            logger.info(f"Auto-detected Foundry endpoint: {endpoint}")
-            return endpoint
-    except Exception as e:
-        logger.warning(f"Could not auto-detect Foundry endpoint: {e}")
-
-    # Fallback - use host.docker.internal for Docker, localhost otherwise
-    if os.path.exists("/.dockerenv") or os.getenv("DOCKER_CONTAINER"):
-        return "http://host.docker.internal:5273/v1"
-    return "http://localhost:5273/v1"
+    default = f"http://{host}:5273/v1"
+    logger.warning(f"Could not detect Foundry, using default: {default}")
+    return default
 
 
 def retrieve_context(query: str, category: Optional[str] = None, top_k: int = 5) -> list[dict]:
@@ -144,8 +216,17 @@ def retrieve_context(query: str, category: Optional[str] = None, top_k: int = 5)
     return chunks
 
 
-def generate_response(query: str, context_chunks: list[dict], category: Optional[str] = None) -> str:
-    """Generate response using Foundry Local with retrieved context."""
+def generate_response(query: str, context_chunks: list[dict], category: Optional[str] = None, retry_on_fail: bool = True) -> str:
+    """Generate response using Foundry Local with retrieved context.
+
+    Args:
+        query: The user's question
+        context_chunks: Retrieved document chunks
+        category: Optional category for system prompt selection
+        retry_on_fail: If True, retry once with refreshed endpoint on connection failure
+    """
+    global foundry_endpoint
+
     # Build context string
     context_parts = []
     for i, chunk in enumerate(context_chunks, 1):
@@ -186,8 +267,23 @@ Answer:"""}
         )
         return response.choices[0].message.content
     except Exception as e:
-        logger.error(f"Error calling Foundry Local: {e}")
-        raise HTTPException(status_code=500, detail=f"LLM generation failed: {str(e)}")
+        error_str = str(e).lower()
+        is_connection_error = any(x in error_str for x in ["connection", "refused", "timeout", "unreachable"])
+
+        if retry_on_fail and is_connection_error:
+            # Foundry might have restarted with new port - try to refresh
+            logger.warning(f"Connection failed to {foundry_endpoint}, attempting to refresh endpoint...")
+            new_endpoint = get_foundry_endpoint(refresh=True)
+            if new_endpoint != foundry_endpoint:
+                logger.info(f"Foundry endpoint changed: {foundry_endpoint} -> {new_endpoint}")
+                foundry_endpoint = new_endpoint
+                return generate_response(query, context_chunks, category, retry_on_fail=False)
+
+        logger.error(f"Error calling Foundry Local at {foundry_endpoint}: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"LLM generation failed. Foundry Local may not be running. Error: {str(e)}"
+        )
 
 
 @asynccontextmanager
@@ -249,11 +345,41 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
+    # Test if Foundry is actually reachable
+    foundry_status = "unknown"
+    try:
+        client = openai.OpenAI(base_url=foundry_endpoint, api_key="local-key")
+        models = client.models.list()
+        foundry_status = "connected"
+    except Exception as e:
+        foundry_status = f"unreachable: {str(e)[:50]}"
+
     return {
         "status": "healthy",
         "embedding_model": config.EMBEDDING_MODEL,
         "qdrant": f"{config.QDRANT_HOST}:{config.QDRANT_PORT}",
-        "foundry_endpoint": foundry_endpoint
+        "foundry_endpoint": foundry_endpoint,
+        "foundry_status": foundry_status,
+        "model": config.FOUNDRY_MODEL
+    }
+
+
+@app.post("/refresh-foundry")
+async def refresh_foundry_endpoint():
+    """Force refresh of Foundry endpoint detection.
+
+    Use this if Foundry Local has restarted and the port has changed.
+    """
+    global foundry_endpoint
+    old_endpoint = foundry_endpoint
+    new_endpoint = get_foundry_endpoint(refresh=True)
+    foundry_endpoint = new_endpoint
+
+    return {
+        "status": "refreshed",
+        "old_endpoint": old_endpoint,
+        "new_endpoint": new_endpoint,
+        "changed": old_endpoint != new_endpoint
     }
 
 
