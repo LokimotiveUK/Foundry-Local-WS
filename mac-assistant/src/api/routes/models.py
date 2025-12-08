@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import re
 import shutil
 import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.core.models import ModelInfo, ModelSwitchRequest
 from src.foundry.manager import FoundryManager, get_foundry_manager
@@ -93,36 +96,97 @@ def _download_model_task(
     expected_size_mb: int,
     force: bool = False,
 ) -> None:
-    """Background task to download a model."""
+    """Background task to download a model with real-time progress tracking.
+
+    This calls the Foundry service directly and parses streaming progress updates
+    rather than relying on file system monitoring.
+    """
     try:
-        cache_path = manager.get_cache_location()
-
-        # Get initial folder size (in case of partial download)
-        initial_size = 0
-        model_folder = _find_model_folder(cache_path, model_id)
-        if model_folder:
-            initial_size = _get_folder_size(model_folder)
-
+        # Initialize download state
         _active_downloads[alias] = {
             "status": "downloading",
             "started_at": time.time(),
             "error": None,
             "model_id": model_id,
             "expected_size_mb": expected_size_mb,
-            "expected_size_bytes": expected_size_mb * 1024 * 1024,
-            "cache_path": cache_path,
-            "initial_size_bytes": initial_size,
-            "downloaded_bytes": 0,
             "progress_percent": 0,
+            "downloaded_mb": 0,
         }
-        logger.info(f"Starting background download: {alias} ({expected_size_mb} MB, initial: {initial_size // (1024*1024)} MB)")
+        logger.info(f"Starting streaming download: {alias} ({expected_size_mb} MB)")
 
-        # This is blocking but runs in a thread
-        manager.download_model(alias, force=force)
+        # Get full model info from SDK for proper download body format
+        sdk_model_info = manager.sdk.get_model_info(alias)
+        if not sdk_model_info:
+            raise RuntimeError(f"Model {alias} not found in catalog")
 
+        # Build request body using SDK's format
+        download_body = {
+            "model": sdk_model_info.to_download_body(),
+            "token": None,
+            "IgnorePipeReport": True,
+        }
+
+        # Stream directly from Foundry service to get real-time progress
+        service_uri = manager.endpoint.replace("/v1", "")  # Get base URI
+
+        # Use extended timeouts for large model downloads (can take 30+ minutes)
+        download_timeout = httpx.Timeout(
+            connect=30.0,      # 30s to connect
+            read=600.0,        # 10 min read timeout (reset on each chunk)
+            write=30.0,        # 30s write timeout
+            pool=30.0,         # 30s pool timeout
+        )
+
+        with httpx.Client(timeout=download_timeout) as client:
+            with client.stream("POST", f"{service_uri}/openai/download", json=download_body) as response:
+                # Check response status
+                if response.status_code != 200:
+                    raise RuntimeError(f"Download request failed with status {response.status_code}")
+
+                final_json = ""
+
+                for line in response.iter_lines():
+                    # Skip empty lines
+                    if not line:
+                        continue
+
+                    # Check if this is the final JSON response
+                    if final_json or line.startswith("{"):
+                        final_json += line
+                        continue
+
+                    # Parse progress percentage from lines like "50.5%" or "Downloading: 50.5%"
+                    if match := re.search(r"(\d+(?:\.\d+)?)%", line):
+                        percent = min(float(match.group(1)), 100.0)
+                        downloaded_mb = (percent / 100.0) * expected_size_mb
+
+                        # Update progress state
+                        _active_downloads[alias].update({
+                            "progress_percent": round(percent, 1),
+                            "downloaded_mb": round(downloaded_mb, 1),
+                        })
+
+                        if int(percent) % 10 == 0:  # Log every 10%
+                            logger.debug(f"Download progress {alias}: {percent:.1f}%")
+
+                # Parse final response
+                if final_json:
+                    try:
+                        result = json.loads(final_json)
+                        if not result.get("success", False):
+                            raise RuntimeError(result.get("errorMessage", "Download failed"))
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Failed to parse final JSON: {e}")
+                        # If we got progress to 100%, consider it successful
+                        if _active_downloads.get(alias, {}).get("progress_percent", 0) < 95:
+                            raise RuntimeError("Download ended unexpectedly")
+
+        # Mark as completed
         _active_downloads[alias] = {
             "status": "completed",
             "completed_at": time.time(),
+            "progress_percent": 100,
+            "downloaded_mb": expected_size_mb,
             "error": None,
         }
         _clear_cache()  # Clear cache so new model shows up
@@ -133,6 +197,7 @@ def _download_model_task(
         _active_downloads[alias] = {
             "status": "failed",
             "error": str(e),
+            "progress_percent": _active_downloads.get(alias, {}).get("progress_percent", 0),
         }
 
 
@@ -225,34 +290,15 @@ async def get_download_status() -> dict[str, Any]:
 
 @router.get("/downloads/{model_alias}/status")
 async def get_model_download_status(model_alias: str) -> dict[str, Any]:
-    """Get download status for a specific model with real-time progress."""
+    """Get download status for a specific model with real-time progress.
+
+    Progress is tracked directly from the Foundry service streaming response,
+    providing accurate real-time download progress.
+    """
     if model_alias not in _active_downloads:
         return {"alias": model_alias, "status": "not_downloading"}
 
     status = _active_downloads[model_alias].copy()
-
-    # Calculate real progress by checking folder size delta
-    if status.get("status") == "downloading":
-        cache_path = status.get("cache_path")
-        model_id = status.get("model_id")
-        expected_bytes = status.get("expected_size_bytes", 0)
-        initial_bytes = status.get("initial_size_bytes", 0)
-
-        if cache_path and model_id and expected_bytes > 0:
-            model_folder = _find_model_folder(cache_path, model_id)
-            if model_folder:
-                current_bytes = _get_folder_size(model_folder)
-                # Calculate new bytes downloaded since we started
-                new_bytes = max(0, current_bytes - initial_bytes)
-                # Progress is based on new bytes vs expected total
-                # Cap at 95% since we can't detect exact completion
-                progress_percent = min(95, int((new_bytes / expected_bytes) * 100))
-                status["downloaded_bytes"] = current_bytes
-                status["new_bytes"] = new_bytes
-                status["progress_percent"] = progress_percent
-                status["downloaded_mb"] = round(current_bytes / (1024 * 1024), 1)
-                status["new_mb"] = round(new_bytes / (1024 * 1024), 1)
-
     return {"alias": model_alias, **status}
 
 
@@ -297,7 +343,6 @@ async def switch_model(
 @router.post("/download/{model_alias}")
 async def download_model(
     model_alias: str,
-    background_tasks: BackgroundTasks,
     force: bool = False,
     blocking: bool = False,
     manager: FoundryManager = Depends(get_foundry_manager),
@@ -324,8 +369,20 @@ async def download_model(
 
     # Get model info for tracking progress
     model_info = manager.get_model_info(model_alias)
-    model_id = model_info.id if model_info else model_alias
-    expected_size_mb = model_info.model_size if model_info else 0
+    if not model_info:
+        raise HTTPException(status_code=404, detail=f"Model '{model_alias}' not found in catalog")
+
+    model_id = model_info.id
+    expected_size_mb = model_info.model_size or 0
+
+    # Check if already cached (unless force=True)
+    if model_info.is_cached and not force:
+        return {
+            "status": "already_cached",
+            "alias": model_alias,
+            "model_id": model_id,
+            "message": "Model is already downloaded. Use force=true to re-download.",
+        }
 
     if blocking:
         # Original blocking behavior

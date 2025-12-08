@@ -1057,8 +1057,11 @@ class MacAssistant {
       if (response.status === 'started' || response.status === 'already_downloading') {
         // Poll for download status
         this.pollDownloadStatus(alias);
-      } else if (response.status === 'completed') {
-        // Blocking download completed immediately
+      } else if (response.status === 'completed' || response.status === 'already_cached') {
+        // Already done - refresh the model list
+        if (modelItem) {
+          modelItem.classList.remove('downloading');
+        }
         await this.loadAllModels();
         await this.loadModels();
       }
@@ -1138,10 +1141,10 @@ class MacAssistant {
     const progressText = modelItem.querySelector('.download-status-text');
     const progressFill = modelItem.querySelector('.download-progress-fill');
 
-    // Use new_mb (delta from initial) for accurate progress display
+    // Display real-time progress from Foundry service stream
     if (progressText && status.expected_size_mb) {
       const percent = status.progress_percent || 0;
-      const downloadedMb = status.new_mb !== undefined ? status.new_mb : (status.downloaded_mb || 0);
+      const downloadedMb = status.downloaded_mb || 0;
       progressText.textContent = `Downloading: ${downloadedMb} MB / ${status.expected_size_mb} MB (${percent}%)`;
     }
 
