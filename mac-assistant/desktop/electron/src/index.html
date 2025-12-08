@@ -41,6 +41,14 @@
             <option value="study">Study</option>
             <option value="writing">Writing</option>
           </select>
+          <button class="manage-docs-btn" id="manageDocsBtn" title="Manage Documents">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="18" x2="12" y2="12"/>
+              <line x1="9" y1="15" x2="15" y2="15"/>
+            </svg>
+          </button>
         </div>
 
         <!-- Chat Sessions List -->
@@ -69,7 +77,23 @@
         <header class="chat-header">
           <div class="chat-info">
             <h2 class="chat-title" id="chatTitle">New Chat</h2>
-            <span class="chat-model" id="chatModel">Loading model...</span>
+            <div class="model-switcher">
+              <button class="chat-model" id="chatModel">
+                <span class="model-name">Loading model...</span>
+                <svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              <div class="model-dropdown" id="modelDropdown">
+                <div class="model-dropdown-header">
+                  <span>Switch Model</span>
+                  <button class="manage-models-btn" id="openModelManagerFromDropdown">Manage All</button>
+                </div>
+                <div class="model-dropdown-list" id="modelDropdownList">
+                  <!-- Populated by JS -->
+                </div>
+              </div>
+            </div>
           </div>
           <div class="header-actions">
             <button class="icon-btn" id="toggleMetricsBtn" title="Toggle Metrics (⌘M)">
@@ -137,12 +161,17 @@
             </button>
             <textarea
               id="messageInput"
-              placeholder="Type your message... (⌘+Enter to send)"
+              placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
               rows="1"
             ></textarea>
             <button class="send-btn" id="sendBtn" disabled>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+              </svg>
+            </button>
+            <button class="stop-btn" id="stopBtn" style="display: none;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2"/>
               </svg>
             </button>
           </div>
@@ -250,6 +279,205 @@
         </div>
         <div class="modal-body">
           <div id="sourcesContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Document Manager Modal -->
+    <div class="modal" id="docManagerModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content modal-xlarge">
+        <div class="modal-header">
+          <h3>Document Manager</h3>
+          <button class="close-btn" id="closeDocManagerBtn">&times;</button>
+        </div>
+        <div class="modal-body doc-manager-body">
+          <!-- Pocket Tabs -->
+          <div class="pocket-tabs-container">
+            <div class="pocket-tabs" id="pocketTabs">
+              <!-- Populated dynamically by JS -->
+            </div>
+            <button class="add-pocket-btn" id="addPocketBtn" title="Create new pocket">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </button>
+            <button class="delete-pocket-btn" id="deletePocketBtn" title="Delete current pocket">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Stats Overview -->
+          <div class="doc-stats" id="docStats">
+            <div class="stat-card">
+              <span class="stat-value" id="statDocCount">--</span>
+              <span class="stat-label">Documents</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="statChunkCount">--</span>
+              <span class="stat-label">Chunks</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="statTotalSize">--</span>
+              <span class="stat-label">Total Size</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="statStatus">--</span>
+              <span class="stat-label">Status</span>
+            </div>
+          </div>
+
+          <!-- Upload Area -->
+          <div class="upload-area" id="uploadArea">
+            <div class="upload-zone" id="uploadZone">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <p>Drag & drop files here or <label class="upload-link">browse<input type="file" id="fileInput" multiple accept=".txt,.md,.pdf,.docx" hidden></label></p>
+              <span class="upload-hint">Supported: PDF, TXT, MD, DOCX</span>
+            </div>
+            <div class="upload-progress" id="uploadProgress" style="display: none;">
+              <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+              </div>
+              <span class="progress-text" id="progressText">Uploading...</span>
+            </div>
+          </div>
+
+          <!-- Documents List -->
+          <div class="doc-list-header">
+            <h4>Documents</h4>
+            <div class="doc-actions">
+              <button class="btn btn-small btn-secondary" id="refreshDocsBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                Refresh
+              </button>
+              <button class="btn btn-small btn-primary" id="ingestAllBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                Re-Ingest All
+              </button>
+            </div>
+          </div>
+          <div class="doc-list" id="docList">
+            <div class="doc-loading">Loading documents...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Pocket Modal -->
+    <div class="modal" id="createPocketModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Create New Pocket</h3>
+          <button class="close-btn" id="closeCreatePocketBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="setting-group">
+            <label class="setting-label">Pocket ID</label>
+            <input type="text" id="newPocketId" class="setting-input" placeholder="e.g., research, work, personal" pattern="[a-z0-9_-]+" required>
+            <p class="setting-description">Lowercase letters, numbers, hyphens only</p>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">Display Name</label>
+            <input type="text" id="newPocketName" class="setting-input" placeholder="e.g., Research Papers" required>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">Description</label>
+            <input type="text" id="newPocketDescription" class="setting-input" placeholder="What documents will this pocket contain?">
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">Color</label>
+            <div class="color-picker">
+              <button class="color-option" data-color="#FF6B6B" style="background:#FF6B6B"></button>
+              <button class="color-option" data-color="#4ECDC4" style="background:#4ECDC4"></button>
+              <button class="color-option" data-color="#45B7D1" style="background:#45B7D1"></button>
+              <button class="color-option" data-color="#96CEB4" style="background:#96CEB4"></button>
+              <button class="color-option" data-color="#DDA0DD" style="background:#DDA0DD"></button>
+              <button class="color-option" data-color="#FFB347" style="background:#FFB347"></button>
+              <button class="color-option selected" data-color="#778899" style="background:#778899"></button>
+            </div>
+            <input type="hidden" id="newPocketColor" value="#778899">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancelCreatePocketBtn">Cancel</button>
+          <button class="btn btn-primary" id="confirmCreatePocketBtn">Create Pocket</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Move Document Modal -->
+    <div class="modal" id="moveDocModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Move Document</h3>
+          <button class="close-btn" id="closeMoveDocBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="moveDocName" style="margin-bottom: 16px; color: var(--text-secondary);"></p>
+          <div class="setting-group">
+            <label class="setting-label">Move to Pocket</label>
+            <select id="moveTargetPocket" class="setting-input">
+              <!-- Populated by JS -->
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancelMoveDocBtn">Cancel</button>
+          <button class="btn btn-primary" id="confirmMoveDocBtn">Move Document</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Model Manager Modal -->
+    <div class="modal" id="modelManagerModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content modal-xlarge">
+        <div class="modal-header">
+          <h3>Model Manager</h3>
+          <button class="close-btn" id="closeModelManagerBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <!-- Current Model Info -->
+          <div class="current-model-info" id="currentModelInfo">
+            <div class="current-model-label">Currently Loaded</div>
+            <div class="current-model-name" id="currentModelName">Loading...</div>
+          </div>
+
+          <!-- Model Filter -->
+          <div class="model-filter">
+            <select id="modelFilter" class="setting-input">
+              <option value="all">All Models</option>
+              <option value="cached">Downloaded Only</option>
+              <option value="gpu">GPU Models</option>
+              <option value="cpu">CPU Models</option>
+            </select>
+            <button class="btn btn-small btn-secondary" id="refreshModelsBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              Refresh
+            </button>
+          </div>
+
+          <!-- Models List -->
+          <div class="models-list" id="modelsList">
+            <div class="doc-loading">Loading models...</div>
+          </div>
         </div>
       </div>
     </div>

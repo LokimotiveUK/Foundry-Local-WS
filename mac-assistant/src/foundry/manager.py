@@ -193,15 +193,32 @@ class FoundryManager:
         is_loaded: bool = False,
     ) -> ModelInfo:
         """Convert SDK model info to our ModelInfo."""
+        # Handle both enum and string values for device_type and execution_provider
+        device_type = sdk_info.device_type
+        if device_type and hasattr(device_type, 'value'):
+            device_type = device_type.value
+        elif not device_type:
+            device_type = "unknown"
+
+        execution_provider = sdk_info.execution_provider
+        if execution_provider and hasattr(execution_provider, 'value'):
+            execution_provider = execution_provider.value
+        elif not execution_provider:
+            execution_provider = "unknown"
+
+        # Handle model size (was model_size, now file_size_mb in newer SDK)
+        model_size = getattr(sdk_info, 'file_size_mb', None) or getattr(sdk_info, 'model_size', 0)
+
         return ModelInfo(
             id=sdk_info.id,
             alias=sdk_info.alias,
             version=sdk_info.version,
-            device_type=sdk_info.device_type.value if sdk_info.device_type else "unknown",
-            execution_provider=sdk_info.execution_provider.value if sdk_info.execution_provider else "unknown",
-            model_size=sdk_info.model_size,
+            device_type=str(device_type),
+            execution_provider=str(execution_provider),
+            model_size=model_size,
             supports_tool_calling=sdk_info.supports_tool_calling,
             is_loaded=is_loaded,
+            is_cached=is_cached,
             is_current=sdk_info.alias == self._current_model or sdk_info.id == self._current_model,
         )
 

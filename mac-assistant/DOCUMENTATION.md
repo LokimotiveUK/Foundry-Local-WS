@@ -507,9 +507,16 @@ CREATE TABLE exports (
 | Title Bar | `index.html` | macOS-style with connection status |
 | Sidebar | `index.html` | Session list, pocket selector, settings |
 | Chat Area | `index.html` | Messages, streaming, metrics |
-| Input Area | `index.html` | Textarea with send button |
+| Input Area | `index.html` | Textarea with send/stop buttons |
 | Settings Modal | `index.html` | Configuration options |
 | Sources Modal | `index.html` | RAG source citations |
+| Model Manager | `index.html` | Download, switch, delete models |
+
+### Chat Features
+
+- **Stop Generation**: Red stop button appears during AI response generation. Click to abort the stream mid-response.
+- **Message Input**: Enter sends message, Shift+Enter adds new line
+- **Streaming**: Real-time token display with performance metrics
 
 ### Styling
 
@@ -547,7 +554,8 @@ CREATE TABLE exports (
 | `⌘,` | Open settings |
 | `⌘E` | Export data |
 | `⌘I` | Import data |
-| `⌘+Enter` | Send message |
+| `Enter` | Send message |
+| `Shift+Enter` | New line in message |
 
 ### Menu Bar
 
@@ -772,6 +780,52 @@ Switch to a different model.
 
 #### `POST /models/unload`
 Unload a model from memory.
+
+#### `POST /models/download/{model_alias}`
+Download a model to local cache (async with progress tracking).
+
+**Query Parameters:**
+- `force`: Force re-download if already cached
+- `blocking`: If true, wait for completion (default: false for async)
+
+**Response (async):**
+```json
+{
+  "status": "started",
+  "alias": "phi-4-mini",
+  "model_id": "microsoft/phi-4-mini",
+  "expected_size_mb": 5713,
+  "message": "Download started. Poll /models/downloads/{alias}/status for progress."
+}
+```
+
+#### `GET /models/downloads/{model_alias}/status`
+Get real-time download progress for a model.
+
+**Response:**
+```json
+{
+  "alias": "phi-4-mini",
+  "status": "downloading",
+  "progress_percent": 45,
+  "downloaded_mb": 2571.0,
+  "new_mb": 2571.0,
+  "expected_size_mb": 5713
+}
+```
+
+#### `DELETE /models/cache/{model_alias}`
+Delete a downloaded model from disk to free storage space.
+
+**Response:**
+```json
+{
+  "status": "deleted",
+  "model": "phi-4-mini",
+  "path": "/Users/.../.foundry/cache/models/Microsoft/...",
+  "freed_mb": 5713.5
+}
+```
 
 ### RAG Endpoints
 

@@ -67,6 +67,7 @@ class ModelInfo(BaseModel):
     model_size: int
     supports_tool_calling: bool = False
     is_loaded: bool = False
+    is_cached: bool = False
     is_current: bool = False
 
 

@@ -223,12 +223,14 @@ class VectorStore:
             query_filter = Filter(must=conditions)
 
         try:
-            results = self.client.search(
+            # Use query_points (newer Qdrant API) instead of deprecated search
+            response = self.client.query_points(
                 collection_name=collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=limit,
                 query_filter=query_filter,
-                score_threshold=min_score,
+                score_threshold=min_score if min_score > 0 else None,
+                with_payload=True,
             )
 
             return [
@@ -238,7 +240,7 @@ class VectorStore:
                     text=r.payload.get("text", ""),
                     metadata={k: v for k, v in r.payload.items() if k != "text"},
                 )
-                for r in results
+                for r in response.points
             ]
 
         except Exception as e:
@@ -316,10 +318,11 @@ class VectorStore:
                 return {"exists": False, "vector_count": 0}
 
             info = self.client.get_collection(collection_name)
+            # Use points_count (newer API) with fallback to vectors_count (older API)
+            vector_count = getattr(info, "points_count", None) or getattr(info, "vectors_count", 0)
             return {
                 "exists": True,
-                "vector_count": info.points_count,
-                "vectors_count": info.vectors_count,
+                "vector_count": vector_count,
                 "indexed_vectors_count": getattr(info, "indexed_vectors_count", 0),
                 "status": info.status.value if info.status else "unknown",
             }
