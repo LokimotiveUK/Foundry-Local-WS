@@ -51,9 +51,78 @@
           </button>
         </div>
 
+        <!-- Projects Section -->
+        <div class="projects-section" id="projectsSection">
+          <div class="section-header">
+            <label class="section-label">Project</label>
+            <button class="add-project-btn" id="addProjectBtn" title="Create project">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+            </button>
+          </div>
+          <div class="project-switcher" id="projectSwitcher">
+            <button class="project-current" id="projectCurrent">
+              <span class="project-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                </svg>
+              </span>
+              <span class="project-name">All Chats</span>
+              <span class="project-arrow">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </span>
+            </button>
+            <div class="project-dropdown" id="projectDropdown">
+              <div class="project-dropdown-list" id="projectDropdownList">
+                <!-- Projects populated by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Folders Section -->
+        <div class="folders-section" id="foldersSection">
+          <div class="section-header">
+            <label class="section-label">Folders</label>
+            <button class="add-folder-btn" id="addFolderBtn" title="Create folder">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+            </button>
+          </div>
+          <div class="folders-list" id="foldersList">
+            <!-- Folders populated by JS -->
+          </div>
+        </div>
+
+        <!-- Tags Section -->
+        <div class="tags-section" id="tagsSection">
+          <div class="section-header">
+            <label class="section-label">Tags</label>
+            <button class="add-tag-btn" id="addTagBtn" title="Create tag">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+            </button>
+          </div>
+          <div class="tags-list" id="tagsList">
+            <!-- Tags populated by JS -->
+          </div>
+        </div>
+
         <!-- Chat Sessions List -->
         <div class="sessions-list" id="sessionsList">
-          <label class="section-label">Recent Chats</label>
+          <div class="section-header">
+            <label class="section-label" id="sessionsLabel">Recent Chats</label>
+            <button class="clear-filter-btn" id="clearFilterBtn" style="display: none;" title="Clear filter">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
           <div class="sessions-container" id="sessionsContainer">
             <!-- Sessions populated by JS -->
           </div>
@@ -146,8 +215,18 @@
         </div>
 
         <!-- Input Area -->
-        <div class="input-area">
+        <div class="input-area" id="inputArea">
+          <!-- Attachments Display -->
+          <div class="attachments-area" id="attachmentsArea" style="display: none;">
+            <div class="attachments-list" id="attachmentsList"></div>
+          </div>
           <div class="input-container">
+            <button class="attach-btn" id="attachBtn" title="Attach files for context">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
+            <input type="file" id="chatFileInput" multiple accept=".txt,.md,.pdf,.docx,.doc,.csv,.json,.py,.js,.ts,.html,.css,.xml,.yaml,.yml" style="display: none;">
             <button class="mic-btn" id="micBtn" title="Voice input (hold to record)">
               <svg class="mic-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -178,6 +257,7 @@
           <div class="input-footer">
             <span class="pocket-indicator" id="pocketIndicator"></span>
             <span class="recording-indicator" id="recordingIndicator"></span>
+            <span class="attachment-indicator" id="attachmentIndicator"></span>
             <span class="char-count" id="charCount">0</span>
           </div>
         </div>
@@ -352,6 +432,13 @@
           <div class="doc-list-header">
             <h4>Documents</h4>
             <div class="doc-actions">
+              <button class="btn btn-small btn-secondary" id="openWatchersBtn" title="Folder Watchers">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                Auto-Ingest
+              </button>
               <button class="btn btn-small btn-secondary" id="refreshDocsBtn">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="23 4 23 10 17 10"/>
@@ -478,6 +565,444 @@
           <div class="models-list" id="modelsList">
             <div class="doc-loading">Loading models...</div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Folder Modal -->
+    <div class="modal" id="createFolderModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="folderModalTitle">Create Folder</h3>
+          <button class="close-btn" id="closeCreateFolderBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="setting-group">
+            <label class="setting-label">Folder Name</label>
+            <input type="text" id="folderNameInput" class="setting-input" placeholder="e.g., Work, Personal, Research">
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">Color</label>
+            <div class="color-picker" id="folderColorPicker">
+              <button class="color-option" data-color="#FF6B6B" style="background:#FF6B6B"></button>
+              <button class="color-option" data-color="#4ECDC4" style="background:#4ECDC4"></button>
+              <button class="color-option" data-color="#45B7D1" style="background:#45B7D1"></button>
+              <button class="color-option" data-color="#96CEB4" style="background:#96CEB4"></button>
+              <button class="color-option" data-color="#DDA0DD" style="background:#DDA0DD"></button>
+              <button class="color-option" data-color="#FFB347" style="background:#FFB347"></button>
+              <button class="color-option selected" data-color="#808080" style="background:#808080"></button>
+            </div>
+            <input type="hidden" id="folderColorInput" value="#808080">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancelCreateFolderBtn">Cancel</button>
+          <button class="btn btn-primary" id="confirmCreateFolderBtn">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Tag Modal -->
+    <div class="modal" id="createTagModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="tagModalTitle">Create Tag</h3>
+          <button class="close-btn" id="closeCreateTagBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="setting-group">
+            <label class="setting-label">Tag Name</label>
+            <input type="text" id="tagNameInput" class="setting-input" placeholder="e.g., important, reference, todo">
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">Color</label>
+            <div class="color-picker" id="tagColorPicker">
+              <button class="color-option selected" data-color="#007AFF" style="background:#007AFF"></button>
+              <button class="color-option" data-color="#FF3B30" style="background:#FF3B30"></button>
+              <button class="color-option" data-color="#34C759" style="background:#34C759"></button>
+              <button class="color-option" data-color="#FF9500" style="background:#FF9500"></button>
+              <button class="color-option" data-color="#AF52DE" style="background:#AF52DE"></button>
+              <button class="color-option" data-color="#5856D6" style="background:#5856D6"></button>
+            </div>
+            <input type="hidden" id="tagColorInput" value="#007AFF">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancelCreateTagBtn">Cancel</button>
+          <button class="btn btn-primary" id="confirmCreateTagBtn">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session Context Menu -->
+    <div class="context-menu" id="sessionContextMenu">
+      <div class="context-menu-item" data-action="pin">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2v10M12 18v4M5 12h14"/>
+        </svg>
+        <span id="pinMenuText">Pin</span>
+      </div>
+      <div class="context-menu-item" data-action="move">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span>Move to folder...</span>
+      </div>
+      <div class="context-menu-item" data-action="tags">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+          <line x1="7" y1="7" x2="7.01" y2="7"/>
+        </svg>
+        <span>Edit tags...</span>
+      </div>
+      <div class="context-menu-item" data-action="project">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+        <span>Move to project...</span>
+      </div>
+      <div class="context-menu-divider"></div>
+      <div class="context-menu-item" data-action="rename">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        <span>Rename</span>
+      </div>
+      <div class="context-menu-item danger" data-action="delete">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+        <span>Delete</span>
+      </div>
+    </div>
+
+    <!-- Folder Context Menu -->
+    <div class="context-menu" id="folderContextMenu">
+      <div class="context-menu-item" data-action="assignProject">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+        <span>Assign to project...</span>
+      </div>
+      <div class="context-menu-item" data-action="editFolder">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        <span>Edit folder...</span>
+      </div>
+      <div class="context-menu-divider"></div>
+      <div class="context-menu-item danger" data-action="deleteFolder">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+        <span>Delete folder</span>
+      </div>
+    </div>
+
+    <!-- Assign Folder to Project Modal -->
+    <div class="modal" id="assignFolderToProjectModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Assign Folder to Project</h3>
+          <button class="close-btn" id="closeAssignFolderBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="folder-select-list" id="folderProjectSelectList">
+            <!-- Projects populated by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Move to Folder Modal -->
+    <div class="modal" id="moveToFolderModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Move to Folder</h3>
+          <button class="close-btn" id="closeMoveToFolderBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="folder-select-list" id="folderSelectList">
+            <div class="folder-select-item" data-folder-id="">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12h18M3 6h18M3 18h18"/>
+              </svg>
+              <span>No Folder (Root)</span>
+            </div>
+            <!-- Folders populated by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Move to Project Modal -->
+    <div class="modal" id="moveToProjectModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Move to Project</h3>
+          <button class="close-btn" id="closeMoveToProjectBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="folder-select-list" id="projectSelectList">
+            <!-- Projects populated by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Tags Modal -->
+    <div class="modal" id="editTagsModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Edit Tags</h3>
+          <button class="close-btn" id="closeEditTagsBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="tags-select-list" id="tagsSelectList">
+            <!-- Tags populated by JS -->
+          </div>
+          <button class="btn btn-small btn-secondary" id="createTagFromEditBtn" style="margin-top: 12px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Create new tag
+          </button>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="saveTagsBtn">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Folder Watchers Modal -->
+    <div class="modal" id="watchersModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h3>Folder Watchers</h3>
+          <button class="close-btn" id="closeWatchersBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">Automatically ingest documents when files are added or changed in watched folders.</p>
+
+          <!-- Watcher Service Status -->
+          <div class="watcher-status" id="watcherStatus">
+            <span class="status-indicator"></span>
+            <span class="status-label">Watcher service: <strong id="watcherServiceStatus">Loading...</strong></span>
+          </div>
+
+          <!-- Add Watcher Button -->
+          <div class="watchers-header">
+            <h4>Watched Folders</h4>
+            <button class="btn btn-small btn-primary" id="addWatcherBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              Add Folder
+            </button>
+          </div>
+
+          <!-- Watchers List -->
+          <div class="watchers-list" id="watchersList">
+            <div class="watcher-empty">No folder watchers configured</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create/Edit Watcher Modal -->
+    <div class="modal" id="watcherFormModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="watcherFormTitle">Add Folder Watcher</h3>
+          <button class="close-btn" id="closeWatcherFormBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="watcherEditId" value="">
+          <div class="form-group">
+            <label class="form-label">Name</label>
+            <input type="text" id="watcherNameInput" class="form-input" placeholder="e.g., Research Papers">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Folder Path</label>
+            <div class="path-input-group">
+              <input type="text" id="watcherPathInput" class="form-input" placeholder="/Users/you/Documents/...">
+              <button class="btn btn-small btn-secondary" id="browseWatcherPathBtn" title="Browse">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Target RAG Pocket</label>
+            <select id="watcherPocketSelect" class="form-input">
+              <!-- Pockets populated by JS -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">File Patterns</label>
+            <input type="text" id="watcherPatternsInput" class="form-input" placeholder="*.txt, *.md, *.pdf, *.docx" value="*.txt,*.md,*.pdf,*.docx">
+            <p class="form-hint">Comma-separated glob patterns</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label checkbox-label">
+              <input type="checkbox" id="watcherRecursiveCheck">
+              <span>Watch subdirectories recursively</span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="form-label checkbox-label">
+              <input type="checkbox" id="watcherInitialScanCheck" checked>
+              <span>Perform initial scan when created</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancelWatcherFormBtn">Cancel</button>
+          <button class="btn btn-primary" id="saveWatcherBtn">Add Watcher</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Model Switch Progress Modal -->
+    <div class="modal modal-switch" id="switchProgressModal">
+      <div class="modal-backdrop modal-backdrop-blur"></div>
+      <div class="modal-content modal-switch-content">
+        <div class="switch-progress-container">
+          <div class="switch-header">
+            <div class="switch-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+              </svg>
+            </div>
+            <h3 class="switch-title">Switching Model</h3>
+          </div>
+
+          <div class="switch-model-info">
+            <span class="switch-from" id="switchFromModel">--</span>
+            <svg class="switch-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+            <span class="switch-to" id="switchToModel">--</span>
+          </div>
+
+          <div class="switch-phases">
+            <div class="switch-phase" id="phaseUnload" data-phase="unloading">
+              <div class="phase-indicator">
+                <div class="phase-dot"></div>
+                <div class="phase-spinner"></div>
+                <svg class="phase-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <span class="phase-label">Unload current model</span>
+            </div>
+            <div class="switch-phase" id="phaseDownload" data-phase="downloading">
+              <div class="phase-indicator">
+                <div class="phase-dot"></div>
+                <div class="phase-spinner"></div>
+                <svg class="phase-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <span class="phase-label">Download model</span>
+              <span class="phase-detail" id="downloadDetail"></span>
+            </div>
+            <div class="switch-phase" id="phaseLoad" data-phase="loading">
+              <div class="phase-indicator">
+                <div class="phase-dot"></div>
+                <div class="phase-spinner"></div>
+                <svg class="phase-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <span class="phase-label">Load into memory</span>
+            </div>
+          </div>
+
+          <div class="switch-progress-bar">
+            <div class="switch-progress-fill" id="switchProgressFill"></div>
+          </div>
+
+          <div class="switch-status" id="switchStatusText">Preparing...</div>
+
+          <div class="switch-actions">
+            <button class="btn btn-secondary btn-small" id="cancelSwitchBtn" style="display: none;">Cancel</button>
+          </div>
+
+          <div class="switch-error" id="switchError" style="display: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            <span id="switchErrorText"></span>
+            <button class="btn btn-primary btn-small" id="switchRetryBtn">Retry</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Project Modal -->
+    <div class="modal" id="createProjectModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="projectModalTitle">Create Project</h3>
+          <button class="close-btn" id="closeProjectModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Name</label>
+            <input type="text" id="projectNameInput" class="form-input" placeholder="My Project">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="projectDescInput" class="form-input" placeholder="Project description..." rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Color</label>
+            <div class="color-picker" id="projectColorPicker">
+              <button class="color-option selected" data-color="#007AFF" style="background: #007AFF"></button>
+              <button class="color-option" data-color="#34C759" style="background: #34C759"></button>
+              <button class="color-option" data-color="#FF9500" style="background: #FF9500"></button>
+              <button class="color-option" data-color="#FF3B30" style="background: #FF3B30"></button>
+              <button class="color-option" data-color="#AF52DE" style="background: #AF52DE"></button>
+              <button class="color-option" data-color="#FF2D55" style="background: #FF2D55"></button>
+              <button class="color-option" data-color="#5856D6" style="background: #5856D6"></button>
+              <button class="color-option" data-color="#808080" style="background: #808080"></button>
+            </div>
+            <input type="hidden" id="projectColorInput" value="#007AFF">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Default RAG Pocket</label>
+            <select id="projectPocketSelect" class="form-input">
+              <option value="">None</option>
+              <!-- Pockets populated by JS -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">System Prompt (optional)</label>
+            <textarea id="projectPromptInput" class="form-input" placeholder="Custom system prompt for all chats in this project..." rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancelProjectBtn">Cancel</button>
+          <button class="btn btn-primary" id="saveProjectBtn">Create</button>
         </div>
       </div>
     </div>

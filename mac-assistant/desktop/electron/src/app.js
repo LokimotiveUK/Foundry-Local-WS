@@ -42,6 +42,24 @@ class MacAssistant {
     this.pockets = [];
     this.moveDocFilename = null;
 
+    // Folders & Tags state
+    this.folders = [];
+    this.tags = [];
+    this.expandedFolders = new Set();  // Track which folders are expanded
+    this.currentTagId = null;     // Filter by tag
+    this.contextMenuSessionId = null;  // Session for context menu
+    this.contextMenuFolderId = null;  // Folder for context menu
+
+    // Chat attachments state
+    this.attachments = [];  // Array of { file: File, name: string, type: string, size: number }
+
+    // Projects state
+    this.projects = [];
+    this.currentProjectId = null;  // null = "All Chats"
+
+    // Folder watchers state
+    this.watchers = [];
+
     // Initialize
     this.init();
   }
@@ -51,8 +69,21 @@ class MacAssistant {
     this.bindEvents();
     await this.loadSettings();
     await this.checkConnection();
+    await this.loadPocketsForSidebar();
+    await this.loadProjects();
+    await this.loadFolders();
+    await this.loadTags();
     await this.loadSessions();
     this.setupElectronListeners();
+  }
+
+  async loadPocketsForSidebar() {
+    try {
+      this.pockets = await this.apiRequest('/rag/pockets');
+      this.updateMainPocketSelector();
+    } catch (error) {
+      console.error('Failed to load pockets:', error);
+    }
   }
 
   cacheElements() {
@@ -159,7 +190,130 @@ class MacAssistant {
       modelFilter: document.getElementById('modelFilter'),
       refreshModelsBtn: document.getElementById('refreshModelsBtn'),
       modelsList: document.getElementById('modelsList'),
+
+      // Folders & Tags
+      foldersList: document.getElementById('foldersList'),
+      tagsList: document.getElementById('tagsList'),
+      addFolderBtn: document.getElementById('addFolderBtn'),
+      addTagBtn: document.getElementById('addTagBtn'),
+      sessionsLabel: document.getElementById('sessionsLabel'),
+      clearFilterBtn: document.getElementById('clearFilterBtn'),
+
+      // Create Folder Modal
+      createFolderModal: document.getElementById('createFolderModal'),
+      folderModalTitle: document.getElementById('folderModalTitle'),
+      closeCreateFolderBtn: document.getElementById('closeCreateFolderBtn'),
+      folderNameInput: document.getElementById('folderNameInput'),
+      folderColorInput: document.getElementById('folderColorInput'),
+      folderColorPicker: document.getElementById('folderColorPicker'),
+      cancelCreateFolderBtn: document.getElementById('cancelCreateFolderBtn'),
+      confirmCreateFolderBtn: document.getElementById('confirmCreateFolderBtn'),
+
+      // Create Tag Modal
+      createTagModal: document.getElementById('createTagModal'),
+      tagModalTitle: document.getElementById('tagModalTitle'),
+      closeCreateTagBtn: document.getElementById('closeCreateTagBtn'),
+      tagNameInput: document.getElementById('tagNameInput'),
+      tagColorInput: document.getElementById('tagColorInput'),
+      tagColorPicker: document.getElementById('tagColorPicker'),
+      cancelCreateTagBtn: document.getElementById('cancelCreateTagBtn'),
+      confirmCreateTagBtn: document.getElementById('confirmCreateTagBtn'),
+
+      // Context Menu
+      sessionContextMenu: document.getElementById('sessionContextMenu'),
+      pinMenuText: document.getElementById('pinMenuText'),
+
+      // Move to Folder Modal
+      moveToFolderModal: document.getElementById('moveToFolderModal'),
+      closeMoveToFolderBtn: document.getElementById('closeMoveToFolderBtn'),
+      folderSelectList: document.getElementById('folderSelectList'),
+
+      // Move to Project Modal
+      moveToProjectModal: document.getElementById('moveToProjectModal'),
+      closeMoveToProjectBtn: document.getElementById('closeMoveToProjectBtn'),
+      projectSelectList: document.getElementById('projectSelectList'),
+
+      // Folder Context Menu
+      folderContextMenu: document.getElementById('folderContextMenu'),
+
+      // Assign Folder to Project Modal
+      assignFolderToProjectModal: document.getElementById('assignFolderToProjectModal'),
+      closeAssignFolderBtn: document.getElementById('closeAssignFolderBtn'),
+      folderProjectSelectList: document.getElementById('folderProjectSelectList'),
+
+      // Edit Tags Modal
+      editTagsModal: document.getElementById('editTagsModal'),
+      closeEditTagsBtn: document.getElementById('closeEditTagsBtn'),
+      tagsSelectList: document.getElementById('tagsSelectList'),
+      createTagFromEditBtn: document.getElementById('createTagFromEditBtn'),
+      saveTagsBtn: document.getElementById('saveTagsBtn'),
+
+      // Chat Attachments
+      inputArea: document.getElementById('inputArea'),
+      attachBtn: document.getElementById('attachBtn'),
+      chatFileInput: document.getElementById('chatFileInput'),
+      attachmentsArea: document.getElementById('attachmentsArea'),
+      attachmentsList: document.getElementById('attachmentsList'),
+      attachmentIndicator: document.getElementById('attachmentIndicator'),
+
+      // Projects
+      projectSwitcher: document.getElementById('projectSwitcher'),
+      projectCurrent: document.getElementById('projectCurrent'),
+      projectDropdown: document.getElementById('projectDropdown'),
+      projectDropdownList: document.getElementById('projectDropdownList'),
+      addProjectBtn: document.getElementById('addProjectBtn'),
+      createProjectModal: document.getElementById('createProjectModal'),
+      closeProjectModalBtn: document.getElementById('closeProjectModalBtn'),
+      projectNameInput: document.getElementById('projectNameInput'),
+      projectDescInput: document.getElementById('projectDescInput'),
+      projectColorPicker: document.getElementById('projectColorPicker'),
+      projectColorInput: document.getElementById('projectColorInput'),
+      projectPocketSelect: document.getElementById('projectPocketSelect'),
+      projectPromptInput: document.getElementById('projectPromptInput'),
+      cancelProjectBtn: document.getElementById('cancelProjectBtn'),
+      saveProjectBtn: document.getElementById('saveProjectBtn'),
+
+      // Folder Watchers
+      openWatchersBtn: document.getElementById('openWatchersBtn'),
+      watchersModal: document.getElementById('watchersModal'),
+      closeWatchersBtn: document.getElementById('closeWatchersBtn'),
+      watcherStatus: document.getElementById('watcherStatus'),
+      watcherServiceStatus: document.getElementById('watcherServiceStatus'),
+      addWatcherBtn: document.getElementById('addWatcherBtn'),
+      watchersList: document.getElementById('watchersList'),
+      watcherFormModal: document.getElementById('watcherFormModal'),
+      watcherFormTitle: document.getElementById('watcherFormTitle'),
+      closeWatcherFormBtn: document.getElementById('closeWatcherFormBtn'),
+      watcherEditId: document.getElementById('watcherEditId'),
+      watcherNameInput: document.getElementById('watcherNameInput'),
+      watcherPathInput: document.getElementById('watcherPathInput'),
+      browseWatcherPathBtn: document.getElementById('browseWatcherPathBtn'),
+      watcherPocketSelect: document.getElementById('watcherPocketSelect'),
+      watcherPatternsInput: document.getElementById('watcherPatternsInput'),
+      watcherRecursiveCheck: document.getElementById('watcherRecursiveCheck'),
+      watcherInitialScanCheck: document.getElementById('watcherInitialScanCheck'),
+      cancelWatcherFormBtn: document.getElementById('cancelWatcherFormBtn'),
+      saveWatcherBtn: document.getElementById('saveWatcherBtn'),
+
+      // Model Switch Progress Modal
+      switchProgressModal: document.getElementById('switchProgressModal'),
+      switchFromModel: document.getElementById('switchFromModel'),
+      switchToModel: document.getElementById('switchToModel'),
+      phaseUnload: document.getElementById('phaseUnload'),
+      phaseDownload: document.getElementById('phaseDownload'),
+      phaseLoad: document.getElementById('phaseLoad'),
+      switchProgressFill: document.getElementById('switchProgressFill'),
+      switchStatusText: document.getElementById('switchStatusText'),
+      cancelSwitchBtn: document.getElementById('cancelSwitchBtn'),
+      switchError: document.getElementById('switchError'),
+      switchErrorText: document.getElementById('switchErrorText'),
+      switchRetryBtn: document.getElementById('switchRetryBtn'),
+      downloadDetail: document.getElementById('downloadDetail'),
     };
+
+    // Switch state tracking
+    this._switchPollInterval = null;
+    this._pendingSwitchModel = null;
   }
 
   bindEvents() {
@@ -277,6 +431,144 @@ class MacAssistant {
     this.elements.closeModelManagerBtn.addEventListener('click', () => this.closeModelManager());
     this.elements.modelFilter.addEventListener('change', () => this.renderModelsList());
     this.elements.refreshModelsBtn.addEventListener('click', () => this.loadAllModels());
+
+    // === Folders & Tags Events ===
+
+    // Add folder/tag buttons
+    this.elements.addFolderBtn?.addEventListener('click', () => this.openCreateFolderModal());
+    this.elements.addTagBtn?.addEventListener('click', () => this.openCreateTagModal());
+    this.elements.clearFilterBtn?.addEventListener('click', () => this.clearFilter());
+
+    // Create Folder Modal
+    this.elements.closeCreateFolderBtn?.addEventListener('click', () => this.closeCreateFolderModal());
+    this.elements.cancelCreateFolderBtn?.addEventListener('click', () => this.closeCreateFolderModal());
+    this.elements.confirmCreateFolderBtn?.addEventListener('click', () => this.createFolder());
+
+    // Create Tag Modal
+    this.elements.closeCreateTagBtn?.addEventListener('click', () => this.closeCreateTagModal());
+    this.elements.cancelCreateTagBtn?.addEventListener('click', () => this.closeCreateTagModal());
+    this.elements.confirmCreateTagBtn?.addEventListener('click', () => this.createTag());
+
+    // Color picker for folder/tag modals
+    this.elements.folderColorPicker?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('color-option')) {
+        this.elements.folderColorPicker.querySelectorAll('.color-option').forEach(btn => btn.classList.remove('selected'));
+        e.target.classList.add('selected');
+        this.elements.folderColorInput.value = e.target.dataset.color;
+      }
+    });
+    this.elements.tagColorPicker?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('color-option')) {
+        this.elements.tagColorPicker.querySelectorAll('.color-option').forEach(btn => btn.classList.remove('selected'));
+        e.target.classList.add('selected');
+        this.elements.tagColorInput.value = e.target.dataset.color;
+      }
+    });
+
+    // Move to Folder Modal
+    this.elements.closeMoveToFolderBtn?.addEventListener('click', () => this.closeMoveToFolderModal());
+
+    // Move to Project Modal
+    this.elements.closeMoveToProjectBtn?.addEventListener('click', () => this.closeMoveToProjectModal());
+
+    // Folder Context Menu
+    document.addEventListener('click', () => this.hideFolderContextMenu());
+    this.elements.folderContextMenu?.addEventListener('click', (e) => {
+      const item = e.target.closest('.context-menu-item');
+      if (item) {
+        const action = item.dataset.action;
+        this.handleFolderContextMenuAction(action);
+      }
+    });
+
+    // Assign Folder to Project Modal
+    this.elements.closeAssignFolderBtn?.addEventListener('click', () => this.closeAssignFolderToProjectModal());
+
+    // Edit Tags Modal
+    this.elements.closeEditTagsBtn?.addEventListener('click', () => this.closeEditTagsModal());
+    this.elements.saveTagsBtn?.addEventListener('click', () => this.closeEditTagsModal());
+    this.elements.createTagFromEditBtn?.addEventListener('click', () => {
+      this.closeEditTagsModal();
+      this.openCreateTagModal();
+    });
+
+    // Context Menu - hide on click outside
+    document.addEventListener('click', () => this.hideContextMenu());
+    this.elements.sessionContextMenu?.addEventListener('click', (e) => {
+      const item = e.target.closest('.context-menu-item');
+      if (item) {
+        const action = item.dataset.action;
+        this.handleContextMenuAction(action);
+      }
+    });
+
+    // === Chat Attachments Events ===
+
+    // Attach button
+    this.elements.attachBtn?.addEventListener('click', () => {
+      this.elements.chatFileInput?.click();
+    });
+
+    // File input change
+    this.elements.chatFileInput?.addEventListener('change', (e) => {
+      this.handleChatAttachments(e.target.files);
+      e.target.value = ''; // Reset to allow re-selecting same file
+    });
+
+    // Drag and drop on input area
+    this.elements.inputArea?.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      this.elements.inputArea.classList.add('drag-over');
+    });
+    this.elements.inputArea?.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      this.elements.inputArea.classList.remove('drag-over');
+    });
+    this.elements.inputArea?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      this.elements.inputArea.classList.remove('drag-over');
+      this.handleChatAttachments(e.dataTransfer.files);
+    });
+
+    // === Projects Events ===
+
+    // Project switcher toggle
+    this.elements.projectCurrent?.addEventListener('click', () => {
+      this.elements.projectSwitcher?.classList.toggle('open');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!this.elements.projectSwitcher?.contains(e.target)) {
+        this.elements.projectSwitcher?.classList.remove('open');
+      }
+    });
+
+    // Add project button
+    this.elements.addProjectBtn?.addEventListener('click', () => this.openCreateProjectModal());
+    this.elements.closeProjectModalBtn?.addEventListener('click', () => this.closeCreateProjectModal());
+    this.elements.cancelProjectBtn?.addEventListener('click', () => this.closeCreateProjectModal());
+    this.elements.saveProjectBtn?.addEventListener('click', () => this.createProject());
+    this.elements.createProjectModal?.querySelector('.modal-backdrop')?.addEventListener('click', () => this.closeCreateProjectModal());
+
+    // Project color picker
+    this.elements.projectColorPicker?.querySelectorAll('.color-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.elements.projectColorPicker.querySelectorAll('.color-option').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        this.elements.projectColorInput.value = btn.dataset.color;
+      });
+    });
+
+    // Folder Watchers
+    this.elements.openWatchersBtn?.addEventListener('click', () => this.openWatchersModal());
+    this.elements.closeWatchersBtn?.addEventListener('click', () => this.closeWatchersModal());
+    this.elements.watchersModal?.querySelector('.modal-backdrop')?.addEventListener('click', () => this.closeWatchersModal());
+    this.elements.addWatcherBtn?.addEventListener('click', () => this.openWatcherForm());
+    this.elements.closeWatcherFormBtn?.addEventListener('click', () => this.closeWatcherForm());
+    this.elements.cancelWatcherFormBtn?.addEventListener('click', () => this.closeWatcherForm());
+    this.elements.saveWatcherBtn?.addEventListener('click', () => this.saveWatcher());
+    this.elements.watcherFormModal?.querySelector('.modal-backdrop')?.addEventListener('click', () => this.closeWatcherForm());
   }
 
   setupElectronListeners() {
@@ -292,6 +584,48 @@ class MacAssistant {
       this.updatePocketIndicator();
     });
     window.electronAPI.onThemeChanged((theme) => this.applyTheme(theme));
+
+    // Handle "continue chat" from quick prompt
+    window.electronAPI.onContinueChat?.(({ message, response }) => {
+      this.continueFromQuickPrompt(message, response);
+    });
+  }
+
+  // Continue chat from quick prompt window
+  async continueFromQuickPrompt(message, response) {
+    // Start a new chat with the message and response already populated
+    await this.newChat();
+
+    // Add the user message
+    this.addMessageToUI('user', message);
+
+    // Add the assistant response
+    this.addMessageToUI('assistant', response);
+
+    // Store in session if we have one
+    if (this.currentSessionId) {
+      try {
+        await this.apiRequest('/chat/messages', {
+          method: 'POST',
+          body: JSON.stringify({
+            session_id: this.currentSessionId,
+            role: 'user',
+            content: message,
+          }),
+        });
+
+        await this.apiRequest('/chat/messages', {
+          method: 'POST',
+          body: JSON.stringify({
+            session_id: this.currentSessionId,
+            role: 'assistant',
+            content: response,
+          }),
+        });
+      } catch (error) {
+        console.error('Failed to save continued chat:', error);
+      }
+    }
   }
 
   // === API Communication ===
@@ -389,7 +723,21 @@ class MacAssistant {
 
   async loadSessions() {
     try {
-      this.sessions = await this.apiRequest('/chat/sessions');
+      // Build query params for filtering
+      const params = new URLSearchParams();
+      if (this.currentProjectId) {
+        params.append('project_id', this.currentProjectId);
+      }
+      if (this.currentTagId) {
+        params.append('tag_id', this.currentTagId);
+      }
+
+      const queryString = params.toString();
+      const url = queryString ? `/chat/sessions?${queryString}` : '/chat/sessions';
+
+      this.sessions = await this.apiRequest(url);
+      // Render both folders (with updated counts) and sessions
+      this.renderFolders();
       this.renderSessions();
     } catch (error) {
       console.error('Failed to load sessions:', error);
@@ -400,51 +748,95 @@ class MacAssistant {
     const container = this.elements.sessionsContainer;
     container.innerHTML = '';
 
-    if (this.sessions.length === 0) {
-      container.innerHTML = '<p class="no-sessions">No recent chats</p>';
+    // Only render root-level sessions (sessions not in any folder)
+    // Folder sessions are rendered in the FOLDERS section via renderFolders()
+    const rootSessions = this.sessions.filter(session => !session.folder_id);
+
+    if (rootSessions.length === 0) {
+      container.innerHTML = '<p class="no-sessions">No chats found</p>';
       return;
     }
 
-    this.sessions.forEach(session => {
-      const item = document.createElement('div');
-      item.className = `session-item${session.id === this.currentSessionId ? ' active' : ''}`;
-      item.dataset.sessionId = session.id;
-
-      const date = new Date(session.updated_at);
-      const timeStr = date.toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-
-      item.innerHTML = `
-        <div class="session-content">
-          <div class="session-title">${this.escapeHtml(session.title)}</div>
-          <div class="session-meta">
-            <span>${timeStr}</span>
-            ${session.rag_pocket ? `<span class="session-pocket">${session.rag_pocket}</span>` : ''}
-          </div>
-        </div>
-        <button class="session-delete-btn" title="Delete chat">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3,6 5,6 21,6"></polyline>
-            <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-          </svg>
-        </button>
-      `;
-
-      // Click on session content to load
-      item.querySelector('.session-content').addEventListener('click', () => this.loadSession(session.id));
-
-      // Click on delete button
-      item.querySelector('.session-delete-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.deleteSession(session.id);
-      });
-
-      container.appendChild(item);
+    rootSessions.forEach(session => {
+      container.appendChild(this.createSessionItem(session, false));
     });
+  }
+
+  createSessionItem(session, isNested = false) {
+    const item = document.createElement('div');
+    item.className = `session-item${session.id === this.currentSessionId ? ' active' : ''}${session.is_pinned ? ' pinned' : ''}${isNested ? ' nested' : ''}`;
+    item.dataset.sessionId = session.id;
+
+    const date = new Date(session.updated_at);
+    const timeStr = date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    // Build tags HTML if session has tags
+    const tagsHtml = session.tags && session.tags.length > 0
+      ? `<div class="session-tags">${session.tags.map(tag =>
+          `<span class="session-tag" style="background: ${tag.color || '#007AFF'}20; color: ${tag.color || '#007AFF'}">${this.escapeHtml(tag.name)}</span>`
+        ).join('')}</div>`
+      : '';
+
+    // Pinned icon
+    const pinnedIcon = session.is_pinned
+      ? `<span class="pin-icon" title="Pinned">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+          </svg>
+        </span>`
+      : '';
+
+    item.innerHTML = `
+      <div class="session-content">
+        <div class="session-title-row">
+          ${pinnedIcon}
+          <div class="session-title">${this.escapeHtml(session.title)}</div>
+        </div>
+        <div class="session-meta">
+          <span>${timeStr}</span>
+          ${session.rag_pocket ? `<span class="session-pocket">${session.rag_pocket}</span>` : ''}
+        </div>
+        ${tagsHtml}
+      </div>
+      <button class="session-menu-btn" title="More options">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="1"></circle>
+          <circle cx="12" cy="5" r="1"></circle>
+          <circle cx="12" cy="19" r="1"></circle>
+        </svg>
+      </button>
+    `;
+
+    // Click on session content to load
+    item.querySelector('.session-content').addEventListener('click', () => this.loadSession(session.id));
+
+    // Click on menu button to show context menu
+    item.querySelector('.session-menu-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.showContextMenu(e, session.id);
+    });
+
+    // Right-click to show context menu
+    item.addEventListener('contextmenu', (e) => {
+      this.showContextMenu(e, session.id);
+    });
+
+    return item;
+  }
+
+  toggleFolderExpand(folderId) {
+    if (this.expandedFolders.has(folderId)) {
+      this.expandedFolders.delete(folderId);
+    } else {
+      this.expandedFolders.add(folderId);
+    }
+    this.renderFolders();
+    this.renderSessions();
   }
 
   async deleteSession(sessionId) {
@@ -538,15 +930,24 @@ class MacAssistant {
     const message = this.elements.messageInput.value.trim();
     if (!message || this.isStreaming) return;
 
-    // Clear input
+    // Capture attachments before clearing
+    const currentAttachments = [...this.attachments];
+
+    // Clear input and attachments
     this.elements.messageInput.value = '';
     this.handleInputChange();
+    this.clearAttachments();
 
     // Hide welcome message
     this.elements.welcomeMessage.style.display = 'none';
 
-    // Add user message to UI
-    this.addMessageToUI('user', message);
+    // Add user message to UI (with attachment badges if any)
+    const attachmentBadges = currentAttachments.length > 0
+      ? `<div class="message-attachments">${currentAttachments.map(a =>
+          `<span class="message-attachment-badge">${this.getAttachmentIcon(a.type)} ${this.escapeHtml(a.name)}</span>`
+        ).join('')}</div>`
+      : '';
+    this.addMessageToUI('user', message, false, attachmentBadges);
 
     // Create assistant message placeholder
     const assistantDiv = this.addMessageToUI('assistant', '', true);
@@ -561,7 +962,7 @@ class MacAssistant {
     this.abortController = new AbortController();
 
     try {
-      await this.streamResponse(message, bubbleDiv);
+      await this.streamResponse(message, bubbleDiv, currentAttachments);
     } catch (error) {
       if (error.name === 'AbortError') {
         console.log('Stream aborted by user');
@@ -592,7 +993,30 @@ class MacAssistant {
     }
   }
 
-  async streamResponse(message, bubbleDiv) {
+  async streamResponse(message, bubbleDiv, attachments = []) {
+    // Process attachments - read file contents
+    const processedAttachments = [];
+    for (const att of attachments) {
+      try {
+        // For text-based files, read as text; for binary, read as base64
+        const textTypes = ['.txt', '.md', '.json', '.csv', '.py', '.js', '.ts', '.html', '.css', '.xml', '.yaml', '.yml'];
+        const isText = textTypes.includes(att.type);
+
+        const content = isText
+          ? await this.readFileAsText(att.file)
+          : await this.readFileAsBase64(att.file);
+
+        processedAttachments.push({
+          filename: att.name,
+          content,
+          content_type: isText ? 'text' : 'base64',
+          file_type: att.type,
+        });
+      } catch (error) {
+        console.error(`Failed to read attachment ${att.name}:`, error);
+      }
+    }
+
     const body = {
       message,
       session_id: this.currentSessionId,
@@ -600,6 +1024,7 @@ class MacAssistant {
       temperature: this.settings.temperature,
       max_tokens: this.settings.maxTokens,
       include_history: true,
+      attachments: processedAttachments.length > 0 ? processedAttachments : undefined,
     };
 
     const response = await fetch(`${this.apiBase}/chat/stream`, {
@@ -678,7 +1103,7 @@ class MacAssistant {
     }
   }
 
-  addMessageToUI(role, content, isStreaming = false) {
+  addMessageToUI(role, content, isStreaming = false, attachmentHtml = '') {
     const div = document.createElement('div');
     div.className = `message ${role}`;
 
@@ -688,7 +1113,7 @@ class MacAssistant {
     if (isStreaming) {
       bubble.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
     } else {
-      bubble.innerHTML = this.formatMessage(content);
+      bubble.innerHTML = this.formatMessage(content) + attachmentHtml;
     }
 
     div.appendChild(bubble);
@@ -1179,42 +1604,280 @@ class MacAssistant {
   }
 
   async switchModel(alias, fromHeader = false) {
-    const btn = this.elements.modelsList?.querySelector(`[data-alias="${alias}"].switch`);
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span>';
+    // Close dropdown if opened from header
+    if (fromHeader) {
+      this.closeModelDropdown();
     }
 
-    // Show loading state in header
+    // Store the pending model for retry functionality
+    this._pendingSwitchModel = alias;
+
+    // Get current model name for display
     const modelNameSpan = this.elements.chatModel.querySelector('.model-name');
-    const originalHeaderText = modelNameSpan?.textContent || alias;
-    if (modelNameSpan) modelNameSpan.textContent = 'Switching...';
+    const currentModel = modelNameSpan?.textContent || 'current model';
+
+    // Show the switch progress modal
+    this.showSwitchProgressModal(currentModel, alias);
 
     try {
-      await this.apiRequest('/models/switch', {
+      // Start the async switch
+      const startResult = await this.apiRequest('/models/switch/start', {
         method: 'POST',
         body: JSON.stringify({ model_alias: alias }),
       });
-      // Reload model info
+
+      if (startResult.status === 'already_loaded') {
+        // Already on this model, just close the modal
+        this.closeSwitchProgressModal();
+        return;
+      }
+
+      if (startResult.status === 'already_switching') {
+        // A switch is already in progress, just start polling
+        console.log('Switch already in progress, starting poll...');
+      }
+
+      // Start polling for status updates
+      this.startSwitchStatusPolling();
+
+    } catch (error) {
+      console.error('Failed to start model switch:', error);
+      this.showSwitchError(error.message || 'Failed to start model switch');
+    }
+  }
+
+  showSwitchProgressModal(fromModel, toModel) {
+    const modal = this.elements.switchProgressModal;
+    if (!modal) return;
+
+    // Reset modal state
+    modal.classList.remove('ready', 'failed');
+    modal.classList.add('visible');
+
+    // Set model names
+    this.elements.switchFromModel.textContent = fromModel || '--';
+    this.elements.switchToModel.textContent = toModel;
+
+    // Reset phases
+    this.elements.phaseUnload.classList.remove('active', 'completed', 'skipped');
+    this.elements.phaseDownload.classList.remove('active', 'completed', 'skipped');
+    this.elements.phaseLoad.classList.remove('active', 'completed', 'skipped');
+
+    // Reset progress
+    this.elements.switchProgressFill.style.width = '0%';
+    this.elements.switchStatusText.textContent = 'Preparing...';
+    this.elements.downloadDetail.textContent = '';
+
+    // Hide error
+    this.elements.switchError.style.display = 'none';
+
+    // Show cancel button
+    this.elements.cancelSwitchBtn.style.display = 'inline-flex';
+    this.elements.cancelSwitchBtn.onclick = () => this.cancelModelSwitch();
+
+    // Setup retry button
+    this.elements.switchRetryBtn.onclick = () => this.retryModelSwitch();
+  }
+
+  closeSwitchProgressModal() {
+    const modal = this.elements.switchProgressModal;
+    if (modal) {
+      modal.classList.remove('visible', 'ready', 'failed');
+    }
+    this.stopSwitchStatusPolling();
+  }
+
+  startSwitchStatusPolling() {
+    // Stop any existing polling
+    this.stopSwitchStatusPolling();
+
+    // Poll every 500ms
+    this._switchPollInterval = setInterval(() => {
+      this.pollSwitchStatus();
+    }, 500);
+
+    // Also poll immediately
+    this.pollSwitchStatus();
+  }
+
+  stopSwitchStatusPolling() {
+    if (this._switchPollInterval) {
+      clearInterval(this._switchPollInterval);
+      this._switchPollInterval = null;
+    }
+  }
+
+  async pollSwitchStatus() {
+    try {
+      const status = await this.apiRequest('/models/switch/status');
+      this.updateSwitchProgressUI(status);
+
+      // Check if we're done
+      if (status.status === 'ready' || status.status === 'failed' || status.status === 'cancelled') {
+        this.stopSwitchStatusPolling();
+
+        if (status.status === 'ready') {
+          await this.handleSwitchComplete(status);
+        } else if (status.status === 'failed') {
+          this.showSwitchError(status.error || 'Switch failed');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to poll switch status:', error);
+      // Don't stop polling on network errors, might be transient
+    }
+  }
+
+  updateSwitchProgressUI(status) {
+    const progressBar = this.elements.switchProgressFill.parentElement;
+    const progressFill = this.elements.switchProgressFill;
+    const currentPhase = status.status;
+
+    // Use indeterminate animation for loading phase (no progress available from SDK)
+    if (currentPhase === 'loading') {
+      progressBar.classList.add('indeterminate');
+      // Clear inline width so CSS animation can take over
+      progressFill.style.width = '';
+    } else {
+      progressBar.classList.remove('indeterminate');
+      // Update progress bar width
+      progressFill.style.width = `${status.progress_percent || 0}%`;
+    }
+
+    // Update status text
+    this.elements.switchStatusText.textContent = status.phase_message || 'Working...';
+
+    // Reset all phases
+    this.elements.phaseUnload.classList.remove('active', 'completed');
+    this.elements.phaseDownload.classList.remove('active', 'completed', 'skipped');
+    this.elements.phaseLoad.classList.remove('active', 'completed');
+
+    switch (currentPhase) {
+      case 'unloading':
+        this.elements.phaseUnload.classList.add('active');
+        break;
+
+      case 'downloading':
+        this.elements.phaseUnload.classList.add('completed');
+        this.elements.phaseDownload.classList.add('active');
+        // Show download details
+        if (status.download_percent !== undefined) {
+          this.elements.downloadDetail.textContent = `${status.download_percent.toFixed(0)}%`;
+        }
+        break;
+
+      case 'loading':
+        this.elements.phaseUnload.classList.add('completed');
+        // Mark download as completed or skipped based on whether it was needed
+        if (status.download_percent !== undefined && status.download_percent > 0) {
+          this.elements.phaseDownload.classList.add('completed');
+        } else {
+          this.elements.phaseDownload.classList.add('skipped');
+          this.elements.phaseDownload.querySelector('.phase-label').textContent = 'Download (cached)';
+        }
+        this.elements.phaseLoad.classList.add('active');
+        this.elements.downloadDetail.textContent = '';
+        break;
+
+      case 'ready':
+        this.elements.phaseUnload.classList.add('completed');
+        if (status.download_percent !== undefined && status.download_percent > 0) {
+          this.elements.phaseDownload.classList.add('completed');
+        } else {
+          this.elements.phaseDownload.classList.add('skipped');
+          this.elements.phaseDownload.querySelector('.phase-label').textContent = 'Download (cached)';
+        }
+        this.elements.phaseLoad.classList.add('completed');
+        this.elements.downloadDetail.textContent = '';
+        // Remove indeterminate when ready
+        progressBar.classList.remove('indeterminate');
+        this.elements.switchProgressFill.style.width = '100%';
+        break;
+    }
+  }
+
+  async handleSwitchComplete(status) {
+    const modal = this.elements.switchProgressModal;
+    modal.classList.add('ready');
+
+    // Update header with new model
+    const modelNameSpan = this.elements.chatModel.querySelector('.model-name');
+    if (modelNameSpan && status.to_model) {
+      modelNameSpan.textContent = status.to_model;
+    }
+
+    // Hide cancel button
+    this.elements.cancelSwitchBtn.style.display = 'none';
+
+    // Update status text
+    this.elements.switchStatusText.textContent = `Switched to ${status.to_model}`;
+
+    // Reload model info
+    try {
       if (this.elements.modelManagerModal.classList.contains('visible')) {
         await this.loadAllModels();
       }
       await this.loadModels();
-      // Update header with new model
-      if (modelNameSpan) modelNameSpan.textContent = alias;
-      if (fromHeader) {
-        this.closeModelDropdown();
-      }
     } catch (error) {
-      console.error('Failed to switch model:', error);
-      alert(`Failed to switch model: ${error.message || 'Unknown error'}`);
-      // Restore header text
-      if (modelNameSpan) modelNameSpan.textContent = originalHeaderText;
-      // Restore button state without full reload
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>`;
-      }
+      console.warn('Failed to reload models after switch:', error);
+    }
+
+    // Reset switch status on backend
+    try {
+      await this.apiRequest('/models/switch/reset', { method: 'POST' });
+    } catch (error) {
+      console.warn('Failed to reset switch status:', error);
+    }
+
+    // Close modal after a short delay to show completion
+    setTimeout(() => {
+      this.closeSwitchProgressModal();
+      // Reset download phase label
+      this.elements.phaseDownload.querySelector('.phase-label').textContent = 'Download model';
+    }, 1500);
+  }
+
+  showSwitchError(message) {
+    const modal = this.elements.switchProgressModal;
+    modal.classList.add('failed');
+
+    // Hide cancel, show error
+    this.elements.cancelSwitchBtn.style.display = 'none';
+    this.elements.switchError.style.display = 'flex';
+    this.elements.switchErrorText.textContent = message;
+  }
+
+  async cancelModelSwitch() {
+    try {
+      await this.apiRequest('/models/switch/cancel', { method: 'POST' });
+    } catch (error) {
+      console.warn('Failed to cancel switch:', error);
+    }
+    this.closeSwitchProgressModal();
+
+    // Reset switch status
+    try {
+      await this.apiRequest('/models/switch/reset', { method: 'POST' });
+    } catch (error) {
+      console.warn('Failed to reset switch status:', error);
+    }
+  }
+
+  async retryModelSwitch() {
+    // Hide error
+    this.elements.switchError.style.display = 'none';
+    this.elements.switchProgressModal.classList.remove('failed');
+
+    // Reset switch status first
+    try {
+      await this.apiRequest('/models/switch/reset', { method: 'POST' });
+    } catch (error) {
+      console.warn('Failed to reset switch status:', error);
+    }
+
+    // Retry with the pending model
+    if (this._pendingSwitchModel) {
+      await this.switchModel(this._pendingSwitchModel);
     }
   }
 
@@ -1265,18 +1928,16 @@ class MacAssistant {
 
     // Switch model if changed
     const selectedModel = this.elements.modelSelect.value;
-    if (selectedModel) {
-      try {
-        await this.apiRequest('/models/switch', {
-          method: 'POST',
-          body: JSON.stringify({ model_alias: selectedModel }),
-        });
-      } catch (error) {
-        console.error('Failed to switch model:', error);
-      }
-    }
+    const currentModelSpan = this.elements.chatModel?.querySelector('.model-name');
+    const currentModel = currentModelSpan?.textContent;
 
     this.closeSettings();
+
+    // Only switch if model actually changed
+    if (selectedModel && selectedModel !== currentModel) {
+      // Use the async switch with progress modal
+      await this.switchModel(selectedModel);
+    }
   }
 
   setTheme(theme) {
@@ -1932,6 +2593,1302 @@ class MacAssistant {
     } catch (error) {
       console.error('Failed to move document:', error);
       alert('Failed to move document. Try manually uploading to the target pocket.');
+    }
+  }
+
+  // === Folders & Tags ===
+
+  async loadFolders() {
+    try {
+      // Build query params to filter by project
+      const params = new URLSearchParams();
+      if (this.currentProjectId) {
+        params.append('project_id', this.currentProjectId);
+        params.append('include_global', 'true');  // Show global folders too
+      }
+      const queryString = params.toString();
+      const url = `/organize/folders${queryString ? `?${queryString}` : ''}`;
+
+      this.folders = await this.apiRequest(url);
+      this.renderFolders();
+    } catch (error) {
+      console.error('Failed to load folders:', error);
+      this.folders = [];
+    }
+  }
+
+  async loadTags() {
+    try {
+      this.tags = await this.apiRequest('/organize/tags');
+      this.renderTags();
+    } catch (error) {
+      console.error('Failed to load tags:', error);
+      this.tags = [];
+    }
+  }
+
+  renderFolders() {
+    const container = this.elements.foldersList;
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (this.folders.length === 0) {
+      container.innerHTML = '<p class="no-items">No folders yet</p>';
+      return;
+    }
+
+    this.folders.forEach(folder => {
+      const isExpanded = this.expandedFolders.has(folder.id);
+
+      // Get sessions in this folder
+      const folderSessions = this.sessions.filter(s => s.folder_id === folder.id);
+      const sessionCount = folderSessions.length;
+
+      const item = document.createElement('div');
+      item.className = `folder-item${isExpanded ? ' expanded' : ''}`;
+      item.dataset.folderId = folder.id;
+
+      // Show global badge when viewing a project and folder is global
+      const isGlobal = !folder.project_id;
+      const showGlobalBadge = isGlobal && this.currentProjectId;
+      const badge = showGlobalBadge
+        ? '<span class="folder-global-badge" title="Global folder">G</span>'
+        : '';
+
+      item.innerHTML = `
+        <span class="folder-toggle">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="${isExpanded ? '6 9 12 15 18 9' : '9 6 15 12 9 18'}"/>
+          </svg>
+        </span>
+        <span class="folder-icon" style="color: ${folder.color || '#808080'}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+          </svg>
+        </span>
+        <span class="folder-name">${this.escapeHtml(folder.name)}</span>
+        ${badge}
+        <span class="folder-count">${sessionCount}</span>
+      `;
+      // Click to expand/collapse the folder
+      item.addEventListener('click', () => this.toggleFolderExpand(folder.id));
+      item.addEventListener('contextmenu', (e) => this.showFolderContextMenu(e, folder.id));
+      container.appendChild(item);
+
+      // Render nested sessions when expanded
+      if (isExpanded && folderSessions.length > 0) {
+        const folderContent = document.createElement('div');
+        folderContent.className = 'folder-content';
+
+        folderSessions.forEach(session => {
+          folderContent.appendChild(this.createSessionItem(session, true));
+        });
+
+        container.appendChild(folderContent);
+      }
+    });
+  }
+
+  renderTags() {
+    const container = this.elements.tagsList;
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (this.tags.length === 0) {
+      container.innerHTML = '<p class="no-items">No tags yet</p>';
+      return;
+    }
+
+    this.tags.forEach(tag => {
+      const item = document.createElement('div');
+      item.className = `tag-item${tag.id === this.currentTagId ? ' active' : ''}`;
+      item.dataset.tagId = tag.id;
+      item.innerHTML = `
+        <span class="tag-dot" style="background: ${tag.color || '#007AFF'}"></span>
+        <span class="tag-name">${this.escapeHtml(tag.name)}</span>
+      `;
+      item.addEventListener('click', () => this.filterByTag(tag.id));
+      container.appendChild(item);
+    });
+  }
+
+  // === Create Folder Modal ===
+
+  openCreateFolderModal() {
+    this.elements.folderModalTitle.textContent = 'Create Folder';
+    this.elements.folderNameInput.value = '';
+    this.elements.folderColorInput.value = '#007AFF';
+
+    // Reset color picker
+    const picker = this.elements.folderColorPicker;
+    if (picker) {
+      picker.querySelectorAll('.color-option').forEach(btn => btn.classList.remove('selected'));
+      picker.querySelector('.color-option[data-color="#007AFF"]')?.classList.add('selected');
+    }
+
+    this.elements.createFolderModal.classList.add('visible');
+  }
+
+  closeCreateFolderModal() {
+    this.elements.createFolderModal.classList.remove('visible');
+  }
+
+  async createFolder() {
+    const name = this.elements.folderNameInput.value.trim();
+    const color = this.elements.folderColorInput.value;
+
+    if (!name) {
+      alert('Please enter a folder name');
+      return;
+    }
+
+    try {
+      await this.apiRequest('/organize/folders', {
+        method: 'POST',
+        body: JSON.stringify({ name, color }),
+      });
+
+      this.closeCreateFolderModal();
+      await this.loadFolders();
+    } catch (error) {
+      console.error('Failed to create folder:', error);
+      alert('Failed to create folder');
+    }
+  }
+
+  // === Create Tag Modal ===
+
+  openCreateTagModal() {
+    this.elements.tagModalTitle.textContent = 'Create Tag';
+    this.elements.tagNameInput.value = '';
+    this.elements.tagColorInput.value = '#007AFF';
+
+    // Reset color picker
+    const picker = this.elements.tagColorPicker;
+    if (picker) {
+      picker.querySelectorAll('.color-option').forEach(btn => btn.classList.remove('selected'));
+      picker.querySelector('.color-option[data-color="#007AFF"]')?.classList.add('selected');
+    }
+
+    this.elements.createTagModal.classList.add('visible');
+  }
+
+  closeCreateTagModal() {
+    this.elements.createTagModal.classList.remove('visible');
+  }
+
+  async createTag() {
+    const name = this.elements.tagNameInput.value.trim();
+    const color = this.elements.tagColorInput.value;
+
+    if (!name) {
+      alert('Please enter a tag name');
+      return;
+    }
+
+    try {
+      await this.apiRequest('/organize/tags', {
+        method: 'POST',
+        body: JSON.stringify({ name, color }),
+      });
+
+      this.closeCreateTagModal();
+      await this.loadTags();
+    } catch (error) {
+      console.error('Failed to create tag:', error);
+      alert('Failed to create tag. Tag name may already exist.');
+    }
+  }
+
+  // === Session Filtering ===
+
+  filterByTag(tagId) {
+    if (this.currentTagId === tagId) {
+      // Toggle off
+      this.currentTagId = null;
+    } else {
+      this.currentTagId = tagId;
+    }
+    this.updateFilterLabel();
+    this.renderTags();
+    this.loadSessions();
+  }
+
+  clearFilter() {
+    this.currentTagId = null;
+    this.updateFilterLabel();
+    this.renderTags();
+    this.loadSessions();
+  }
+
+  updateFilterLabel() {
+    const label = this.elements.sessionsLabel;
+    const clearBtn = this.elements.clearFilterBtn;
+
+    if (!label) return;
+
+    if (this.currentTagId) {
+      const tag = this.tags.find(t => t.id === this.currentTagId);
+      label.textContent = tag ? `🏷️ ${tag.name}` : 'Filtered';
+      if (clearBtn) clearBtn.style.display = 'block';
+    } else {
+      label.textContent = 'Recent Chats';
+      if (clearBtn) clearBtn.style.display = 'none';
+    }
+  }
+
+  // === Context Menu ===
+
+  showContextMenu(event, sessionId) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    this.contextMenuSessionId = sessionId;
+    const session = this.sessions.find(s => s.id === sessionId);
+
+    if (!session) return;
+
+    // Update pin menu text based on current state
+    const pinText = this.elements.pinMenuText;
+    if (pinText) {
+      pinText.textContent = session.is_pinned ? 'Unpin' : 'Pin';
+    }
+
+    // Position the menu
+    const menu = this.elements.sessionContextMenu;
+    if (!menu) return;
+
+    menu.style.display = 'block';
+
+    // Get viewport dimensions
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const menuRect = menu.getBoundingClientRect();
+
+    // Calculate position
+    let x = event.clientX;
+    let y = event.clientY;
+
+    // Adjust if menu would go off-screen
+    if (x + menuRect.width > viewportWidth) {
+      x = viewportWidth - menuRect.width - 10;
+    }
+    if (y + menuRect.height > viewportHeight) {
+      y = viewportHeight - menuRect.height - 10;
+    }
+
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+  }
+
+  hideContextMenu() {
+    const menu = this.elements.sessionContextMenu;
+    if (menu) {
+      menu.style.display = 'none';
+    }
+    // Don't clear contextMenuSessionId here - it's needed by modals that open from context menu
+    // It will be cleared when the modals close
+  }
+
+  async handleContextMenuAction(action) {
+    const sessionId = this.contextMenuSessionId;
+    if (!sessionId) return;
+
+    this.hideContextMenu();
+
+    switch (action) {
+      case 'pin':
+        await this.toggleSessionPin(sessionId);
+        break;
+      case 'move':
+        this.openMoveToFolderModal(sessionId);
+        break;
+      case 'project':
+        this.openMoveToProjectModal(sessionId);
+        break;
+      case 'tags':
+        this.openEditTagsModal(sessionId);
+        break;
+      case 'rename':
+        await this.renameSession(sessionId);
+        break;
+      case 'delete':
+        await this.deleteSession(sessionId);
+        break;
+    }
+  }
+
+  async toggleSessionPin(sessionId) {
+    const session = this.sessions.find(s => s.id === sessionId);
+    if (!session) return;
+
+    try {
+      await this.apiRequest(`/organize/sessions/${sessionId}/pin`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_pinned: !session.is_pinned }),
+      });
+      await this.loadSessions();
+    } catch (error) {
+      console.error('Failed to toggle pin:', error);
+    }
+  }
+
+  async renameSession(sessionId) {
+    const session = this.sessions.find(s => s.id === sessionId);
+    if (!session) return;
+
+    const newTitle = prompt('Enter new name:', session.title);
+    if (!newTitle || newTitle === session.title) return;
+
+    try {
+      await this.apiRequest(`/chat/sessions/${sessionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: newTitle }),
+      });
+      await this.loadSessions();
+
+      // Update chat title if this is current session
+      if (sessionId === this.currentSessionId) {
+        this.elements.chatTitle.textContent = newTitle;
+      }
+    } catch (error) {
+      console.error('Failed to rename session:', error);
+      alert('Failed to rename chat');
+    }
+  }
+
+  // === Move to Folder Modal ===
+
+  openMoveToFolderModal(sessionId) {
+    this.contextMenuSessionId = sessionId;
+    const session = this.sessions.find(s => s.id === sessionId);
+
+    const list = this.elements.folderSelectList;
+    if (!list) return;
+
+    // Clear existing items
+    list.innerHTML = '';
+
+    // Create "No Folder" option
+    const noFolderItem = document.createElement('div');
+    noFolderItem.className = `folder-select-item${!session?.folder_id ? ' selected' : ''}`;
+    noFolderItem.dataset.folderId = '';
+    noFolderItem.innerHTML = `
+      <span class="folder-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+      </span>
+      <span>No Folder</span>
+    `;
+    noFolderItem.addEventListener('click', (e) => {
+      console.log('No Folder item clicked!');
+      e.stopPropagation();
+      this.moveSessionToFolder('');
+    });
+    list.appendChild(noFolderItem);
+
+    // Create folder options (show global badge for global folders when in project view)
+    console.log('Creating folder items, folders count:', this.folders.length);
+    this.folders.forEach(folder => {
+      const item = document.createElement('div');
+      item.className = `folder-select-item${session?.folder_id === folder.id ? ' selected' : ''}`;
+      item.dataset.folderId = folder.id;
+
+      // Show global badge if folder is global and we're viewing a specific project
+      const isGlobal = !folder.project_id;
+      const showGlobalBadge = isGlobal && this.currentProjectId;
+      const globalBadge = showGlobalBadge ? '<span class="folder-global-badge">Global</span>' : '';
+
+      item.innerHTML = `
+        <span class="folder-icon" style="color: ${folder.color || '#808080'}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+          </svg>
+        </span>
+        <span>${this.escapeHtml(folder.name)}</span>
+        ${globalBadge}
+      `;
+      console.log('Adding click listener for folder:', folder.id, folder.name);
+      item.addEventListener('click', (e) => {
+        console.log('Folder item clicked!', folder.id);
+        e.stopPropagation();
+        this.moveSessionToFolder(folder.id);
+      });
+      list.appendChild(item);
+    });
+
+    this.elements.moveToFolderModal.classList.add('visible');
+  }
+
+  closeMoveToFolderModal() {
+    this.elements.moveToFolderModal.classList.remove('visible');
+    this.contextMenuSessionId = null;
+  }
+
+  async moveSessionToFolder(folderId) {
+    console.log('moveSessionToFolder called with folderId:', folderId);
+    const sessionId = this.contextMenuSessionId;
+    console.log('contextMenuSessionId:', sessionId);
+    if (!sessionId) {
+      console.error('No sessionId - returning early');
+      return;
+    }
+
+    try {
+      console.log('Making API request...');
+      await this.apiRequest(`/organize/sessions/${sessionId}/folder`, {
+        method: 'PUT',
+        body: JSON.stringify({ folder_id: folderId || null }),
+      });
+
+      console.log('API request succeeded');
+      this.closeMoveToFolderModal();
+      await this.loadFolders();
+      await this.loadSessions();
+    } catch (error) {
+      console.error('Failed to move session:', error);
+      alert('Failed to move chat to folder');
+    }
+  }
+
+  // === Move to Project Modal ===
+
+  openMoveToProjectModal(sessionId) {
+    this.contextMenuSessionId = sessionId;
+    const session = this.sessions.find(s => s.id === sessionId);
+
+    const list = this.elements.projectSelectList;
+    if (!list) return;
+
+    // Clear existing items
+    list.innerHTML = '';
+
+    // Create "No Project (All Chats)" option
+    const noProjectItem = document.createElement('div');
+    noProjectItem.className = `folder-select-item${!session?.project_id ? ' selected' : ''}`;
+    noProjectItem.dataset.projectId = '';
+    noProjectItem.innerHTML = `
+      <span class="folder-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+      </span>
+      <span>All Chats (No Project)</span>
+    `;
+    noProjectItem.addEventListener('click', (e) => {
+      console.log('No Project item clicked!');
+      e.stopPropagation();
+      this.moveSessionToProject('');
+    });
+    list.appendChild(noProjectItem);
+
+    // Create project options
+    console.log('Creating project items, projects count:', this.projects.length);
+    this.projects.forEach(project => {
+      const item = document.createElement('div');
+      item.className = `folder-select-item${session?.project_id === project.id ? ' selected' : ''}`;
+      item.dataset.projectId = project.id;
+      item.innerHTML = `
+        <span class="folder-icon" style="color: ${project.color || '#007AFF'}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+          </svg>
+        </span>
+        <span>${this.escapeHtml(project.name)}</span>
+      `;
+      console.log('Adding click listener for project:', project.id, project.name);
+      item.addEventListener('click', (e) => {
+        console.log('Project item clicked!', project.id);
+        e.stopPropagation();
+        this.moveSessionToProject(project.id);
+      });
+      list.appendChild(item);
+    });
+
+    this.elements.moveToProjectModal.classList.add('visible');
+  }
+
+  closeMoveToProjectModal() {
+    this.elements.moveToProjectModal.classList.remove('visible');
+    this.contextMenuSessionId = null;
+  }
+
+  async moveSessionToProject(projectId) {
+    console.log('moveSessionToProject called with projectId:', projectId);
+    const sessionId = this.contextMenuSessionId;
+    console.log('contextMenuSessionId:', sessionId);
+    if (!sessionId) {
+      console.error('No sessionId - returning early');
+      return;
+    }
+
+    try {
+      console.log('Making API request to move session to project...');
+      await this.apiRequest(`/chat/sessions/${sessionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ project_id: projectId || null }),
+      });
+
+      console.log('API request succeeded');
+      this.closeMoveToProjectModal();
+      await this.loadSessions();
+    } catch (error) {
+      console.error('Failed to move session to project:', error);
+      alert('Failed to move chat to project');
+    }
+  }
+
+  // === Edit Tags Modal ===
+
+  async openEditTagsModal(sessionId) {
+    this.contextMenuSessionId = sessionId;
+
+    // Get current tags for this session
+    let sessionTags = [];
+    try {
+      sessionTags = await this.apiRequest(`/organize/sessions/${sessionId}/tags`);
+    } catch (error) {
+      console.error('Failed to get session tags:', error);
+    }
+
+    const sessionTagIds = sessionTags.map(t => t.id);
+    const list = this.elements.tagsSelectList;
+    if (!list) return;
+
+    if (this.tags.length === 0) {
+      list.innerHTML = '<p class="no-items">No tags available. Create one first.</p>';
+    } else {
+      list.innerHTML = this.tags.map(tag => `
+        <label class="tag-select-item">
+          <input type="checkbox" value="${tag.id}" ${sessionTagIds.includes(tag.id) ? 'checked' : ''}>
+          <span class="tag-dot" style="background: ${tag.color || '#007AFF'}"></span>
+          <span>${this.escapeHtml(tag.name)}</span>
+        </label>
+      `).join('');
+    }
+
+    this.elements.editTagsModal.classList.add('visible');
+  }
+
+  async closeEditTagsModal() {
+    // Save selected tags
+    const sessionId = this.contextMenuSessionId;
+    if (sessionId) {
+      const list = this.elements.tagsSelectList;
+      const checkboxes = list?.querySelectorAll('input[type="checkbox"]');
+      const selectedTagIds = [];
+
+      checkboxes?.forEach(cb => {
+        if (cb.checked) {
+          selectedTagIds.push(cb.value);
+        }
+      });
+
+      try {
+        await this.apiRequest(`/organize/sessions/${sessionId}/tags`, {
+          method: 'PUT',
+          body: JSON.stringify({ tag_ids: selectedTagIds }),
+        });
+        await this.loadSessions();
+      } catch (error) {
+        console.error('Failed to update session tags:', error);
+      }
+    }
+
+    this.elements.editTagsModal.classList.remove('visible');
+    this.contextMenuSessionId = null;
+  }
+
+  // === Folder Context Menu ===
+
+  showFolderContextMenu(event, folderId) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    this.contextMenuFolderId = folderId;
+
+    const menu = this.elements.folderContextMenu;
+    if (!menu) return;
+
+    // Position the menu
+    const x = event.clientX;
+    const y = event.clientY;
+
+    menu.style.display = 'block';
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+
+    // Ensure menu stays within viewport
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+      menu.style.left = `${window.innerWidth - rect.width - 10}px`;
+    }
+    if (rect.bottom > window.innerHeight) {
+      menu.style.top = `${window.innerHeight - rect.height - 10}px`;
+    }
+  }
+
+  hideFolderContextMenu() {
+    const menu = this.elements.folderContextMenu;
+    if (menu) {
+      menu.style.display = 'none';
+    }
+  }
+
+  async handleFolderContextMenuAction(action) {
+    const folderId = this.contextMenuFolderId;
+    if (!folderId) return;
+
+    this.hideFolderContextMenu();
+
+    switch (action) {
+      case 'assignProject':
+        this.openAssignFolderToProjectModal(folderId);
+        break;
+      case 'editFolder':
+        this.openEditFolderModal(folderId);
+        break;
+      case 'deleteFolder':
+        await this.deleteFolder(folderId);
+        break;
+    }
+  }
+
+  // === Assign Folder to Project Modal ===
+
+  openAssignFolderToProjectModal(folderId) {
+    this.contextMenuFolderId = folderId;
+    const folder = this.folders.find(f => f.id === folderId);
+
+    const list = this.elements.folderProjectSelectList;
+    if (!list) return;
+
+    // Clear existing items
+    list.innerHTML = '';
+
+    // Create "Global (No Project)" option
+    const globalItem = document.createElement('div');
+    globalItem.className = `folder-select-item${!folder?.project_id ? ' selected' : ''}`;
+    globalItem.dataset.projectId = '';
+    globalItem.innerHTML = `
+      <span class="folder-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+      </span>
+      <span>Global (Visible in all projects)</span>
+    `;
+    globalItem.addEventListener('click', () => this.assignFolderToProject(''));
+    list.appendChild(globalItem);
+
+    // Create project options
+    this.projects.forEach(project => {
+      const item = document.createElement('div');
+      item.className = `folder-select-item${folder?.project_id === project.id ? ' selected' : ''}`;
+      item.dataset.projectId = project.id;
+      item.innerHTML = `
+        <span class="folder-icon" style="color: ${project.color || '#007AFF'}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+          </svg>
+        </span>
+        <span>${this.escapeHtml(project.name)}</span>
+      `;
+      item.addEventListener('click', () => this.assignFolderToProject(project.id));
+      list.appendChild(item);
+    });
+
+    this.elements.assignFolderToProjectModal.classList.add('visible');
+  }
+
+  closeAssignFolderToProjectModal() {
+    this.elements.assignFolderToProjectModal.classList.remove('visible');
+  }
+
+  async assignFolderToProject(projectId) {
+    const folderId = this.contextMenuFolderId;
+    if (!folderId) return;
+
+    try {
+      await this.apiRequest(`/organize/folders/${folderId}/project`, {
+        method: 'PUT',
+        body: JSON.stringify({ project_id: projectId || null }),
+      });
+
+      this.closeAssignFolderToProjectModal();
+      await this.loadFolders();
+    } catch (error) {
+      console.error('Failed to assign folder to project:', error);
+      alert('Failed to assign folder to project');
+    }
+  }
+
+  openEditFolderModal(folderId) {
+    const folder = this.folders.find(f => f.id === folderId);
+    if (!folder) return;
+
+    this.editingFolderId = folderId;
+    this.elements.folderModalTitle.textContent = 'Edit Folder';
+    this.elements.folderNameInput.value = folder.name;
+    this.elements.folderColorInput.value = folder.color || '#007AFF';
+
+    // Set color picker
+    const picker = this.elements.folderColorPicker;
+    if (picker) {
+      picker.querySelectorAll('.color-option').forEach(btn => btn.classList.remove('selected'));
+      const colorBtn = picker.querySelector(`.color-option[data-color="${folder.color}"]`);
+      if (colorBtn) {
+        colorBtn.classList.add('selected');
+      }
+    }
+
+    this.elements.createFolderModal.classList.add('visible');
+  }
+
+  async deleteFolder(folderId) {
+    const folder = this.folders.find(f => f.id === folderId);
+    if (!folder) return;
+
+    const confirmMsg = folder.session_count > 0
+      ? `Delete folder "${folder.name}"? ${folder.session_count} chat(s) will be moved to root.`
+      : `Delete folder "${folder.name}"?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      await this.apiRequest(`/organize/folders/${folderId}`, {
+        method: 'DELETE',
+      });
+      await this.loadFolders();
+      await this.loadSessions();
+    } catch (error) {
+      console.error('Failed to delete folder:', error);
+      alert('Failed to delete folder');
+    }
+  }
+
+  // === Chat Attachments ===
+
+  handleChatAttachments(files) {
+    if (!files || files.length === 0) return;
+
+    const allowedTypes = [
+      '.txt', '.md', '.pdf', '.docx', '.doc', '.csv', '.json',
+      '.py', '.js', '.ts', '.html', '.css', '.xml', '.yaml', '.yml'
+    ];
+
+    for (const file of files) {
+      const ext = '.' + file.name.split('.').pop().toLowerCase();
+
+      if (!allowedTypes.includes(ext)) {
+        console.warn(`Unsupported file type: ${file.name}`);
+        continue;
+      }
+
+      // Check for duplicates
+      if (this.attachments.some(a => a.name === file.name)) {
+        continue;
+      }
+
+      // Add to attachments
+      this.attachments.push({
+        file,
+        name: file.name,
+        type: ext,
+        size: file.size,
+      });
+    }
+
+    this.renderAttachments();
+    this.updateAttachmentIndicator();
+  }
+
+  removeAttachment(filename) {
+    this.attachments = this.attachments.filter(a => a.name !== filename);
+    this.renderAttachments();
+    this.updateAttachmentIndicator();
+  }
+
+  clearAttachments() {
+    this.attachments = [];
+    this.renderAttachments();
+    this.updateAttachmentIndicator();
+  }
+
+  renderAttachments() {
+    const container = this.elements.attachmentsList;
+    const area = this.elements.attachmentsArea;
+
+    if (!container || !area) return;
+
+    if (this.attachments.length === 0) {
+      area.style.display = 'none';
+      this.elements.attachBtn?.classList.remove('has-attachments');
+      return;
+    }
+
+    area.style.display = 'block';
+    this.elements.attachBtn?.classList.add('has-attachments');
+
+    container.innerHTML = this.attachments.map(att => `
+      <div class="attachment-chip" data-filename="${this.escapeHtml(att.name)}">
+        <span class="attachment-icon">${this.getAttachmentIcon(att.type)}</span>
+        <span class="attachment-name">${this.escapeHtml(att.name)}</span>
+        <button class="attachment-remove" onclick="app.removeAttachment('${this.escapeHtml(att.name).replace(/'/g, "\\'")}')">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    `).join('');
+  }
+
+  updateAttachmentIndicator() {
+    const indicator = this.elements.attachmentIndicator;
+    if (!indicator) return;
+
+    if (this.attachments.length > 0) {
+      const totalSize = this.attachments.reduce((sum, a) => sum + a.size, 0);
+      indicator.textContent = `${this.attachments.length} file${this.attachments.length > 1 ? 's' : ''} attached (${this.formatFileSize(totalSize)})`;
+    } else {
+      indicator.textContent = '';
+    }
+  }
+
+  getAttachmentIcon(type) {
+    const iconMap = {
+      '.pdf': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+      '.txt': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+      '.md': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>',
+      '.json': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><polyline points="4 17 4 20 20 20 20 17"/><line x1="9" y1="4" x2="9" y2="20"/></svg>',
+      '.py': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+      '.js': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+      '.ts': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+    };
+    return iconMap[type] || '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>';
+  }
+
+  async readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  }
+
+  // === Projects ===
+
+  async loadProjects() {
+    try {
+      this.projects = await this.apiRequest('/projects');
+      this.renderProjects();
+    } catch (error) {
+      console.error('Failed to load projects:', error);
+      this.projects = [];
+    }
+  }
+
+  renderProjects() {
+    const list = this.elements.projectDropdownList;
+    const current = this.elements.projectCurrent;
+
+    if (!list || !current) return;
+
+    // Update current project display
+    const currentProject = this.projects.find(p => p.id === this.currentProjectId);
+    const projectName = current.querySelector('.project-name');
+    const projectIcon = current.querySelector('.project-icon');
+
+    if (currentProject) {
+      projectName.textContent = currentProject.name;
+      projectIcon.innerHTML = `<span class="project-color" style="background: ${currentProject.color}; width: 10px; height: 10px; border-radius: 50%;"></span>`;
+    } else {
+      projectName.textContent = 'All Chats';
+      projectIcon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      </svg>`;
+    }
+
+    // Clear existing items
+    list.innerHTML = '';
+
+    // Create "All Chats" item
+    const allChatsItem = document.createElement('div');
+    allChatsItem.className = `project-dropdown-item${!this.currentProjectId ? ' active' : ''}`;
+    allChatsItem.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      </svg>
+      <span>All Chats</span>
+    `;
+    allChatsItem.addEventListener('click', () => this.switchProject(null));
+    list.appendChild(allChatsItem);
+
+    // Create project items
+    this.projects.forEach(project => {
+      const item = document.createElement('div');
+      item.className = `project-dropdown-item${project.id === this.currentProjectId ? ' active' : ''}`;
+      item.innerHTML = `
+        <span class="project-color" style="background: ${project.color || '#007AFF'}"></span>
+        <span>${this.escapeHtml(project.name)}</span>
+        <span style="font-size: 11px; color: var(--text-tertiary); margin-left: auto;">${project.session_count || 0}</span>
+      `;
+      item.addEventListener('click', () => this.switchProject(project.id));
+      list.appendChild(item);
+    });
+  }
+
+  async switchProject(projectId) {
+    this.currentProjectId = projectId;
+    this.elements.projectSwitcher?.classList.remove('open');
+    this.renderProjects();
+
+    // Clear tag filter when switching projects
+    this.currentTagId = null;
+    this.updateFilterLabel();
+
+    // Reload folders filtered by the new project
+    await this.loadFolders();
+    this.renderTags();
+
+    // Reload sessions for the new project
+    await this.loadSessions();
+  }
+
+  openCreateProjectModal() {
+    this.elements.projectNameInput.value = '';
+    this.elements.projectDescInput.value = '';
+    this.elements.projectColorInput.value = '#007AFF';
+    this.elements.projectPromptInput.value = '';
+
+    // Reset color picker
+    this.elements.projectColorPicker?.querySelectorAll('.color-option').forEach(btn => btn.classList.remove('selected'));
+    this.elements.projectColorPicker?.querySelector('.color-option[data-color="#007AFF"]')?.classList.add('selected');
+
+    // Populate pocket select
+    if (this.elements.projectPocketSelect && this.pockets) {
+      this.elements.projectPocketSelect.innerHTML = '<option value="">None</option>' +
+        this.pockets.map(p => `<option value="${p.id}">${this.escapeHtml(p.name)}</option>`).join('');
+    }
+
+    this.elements.createProjectModal?.classList.add('visible');
+  }
+
+  closeCreateProjectModal() {
+    this.elements.createProjectModal?.classList.remove('visible');
+  }
+
+  async createProject() {
+    const name = this.elements.projectNameInput.value.trim();
+    const description = this.elements.projectDescInput.value.trim();
+    const color = this.elements.projectColorInput.value;
+    const defaultPocket = this.elements.projectPocketSelect?.value || null;
+    const systemPrompt = this.elements.projectPromptInput.value.trim();
+
+    if (!name) {
+      alert('Please enter a project name');
+      return;
+    }
+
+    try {
+      await this.apiRequest('/projects', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          description: description || null,
+          color,
+          default_rag_pocket: defaultPocket,
+          system_prompt: systemPrompt || null,
+        }),
+      });
+
+      this.closeCreateProjectModal();
+      await this.loadProjects();
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      alert('Failed to create project');
+    }
+  }
+
+  // === Folder Watchers ===
+
+  async openWatchersModal() {
+    await this.loadWatchers();
+    await this.loadWatcherStatus();
+    this.elements.watchersModal?.classList.add('visible');
+  }
+
+  closeWatchersModal() {
+    this.elements.watchersModal?.classList.remove('visible');
+  }
+
+  async loadWatchers() {
+    try {
+      this.watchers = await this.apiRequest('/watchers');
+      this.renderWatchers();
+    } catch (error) {
+      console.error('Failed to load watchers:', error);
+      this.watchers = [];
+      this.renderWatchers();
+    }
+  }
+
+  async loadWatcherStatus() {
+    try {
+      const status = await this.apiRequest('/watchers/status');
+      const isRunning = status.running;
+
+      this.elements.watcherStatus?.classList.toggle('running', isRunning);
+      this.elements.watcherStatus?.classList.toggle('stopped', !isRunning);
+
+      if (this.elements.watcherServiceStatus) {
+        this.elements.watcherServiceStatus.textContent = isRunning
+          ? `Running (${status.active_watchers} active)`
+          : 'Stopped';
+      }
+    } catch (error) {
+      console.error('Failed to load watcher status:', error);
+      if (this.elements.watcherServiceStatus) {
+        this.elements.watcherServiceStatus.textContent = 'Unknown';
+      }
+    }
+  }
+
+  renderWatchers() {
+    const container = this.elements.watchersList;
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (this.watchers.length === 0) {
+      container.innerHTML = `<div class="watcher-empty">No folder watchers configured</div>`;
+      return;
+    }
+
+    this.watchers.forEach(watcher => {
+      const item = document.createElement('div');
+      item.className = `watcher-item ${watcher.is_active ? '' : 'inactive'}`;
+      item.dataset.id = watcher.id;
+      item.innerHTML = `
+        <div class="watcher-toggle">
+          <input type="checkbox" ${watcher.is_active ? 'checked' : ''}>
+        </div>
+        <div class="watcher-info">
+          <div class="watcher-name">
+            ${this.escapeHtml(watcher.name)}
+            <span class="watcher-badge ${watcher.is_active ? '' : 'inactive'}">
+              ${watcher.is_active ? 'Active' : 'Paused'}
+            </span>
+          </div>
+          <div class="watcher-path" title="${this.escapeHtml(watcher.path)}">${this.escapeHtml(watcher.path)}</div>
+          <div class="watcher-meta">
+            <span>Pocket: ${this.escapeHtml(watcher.pocket_id)}</span>
+            <span>${watcher.recursive ? 'Recursive' : 'Single folder'}</span>
+            <span>${watcher.file_count || 0} files</span>
+          </div>
+        </div>
+        <div class="watcher-actions">
+          <button class="watcher-action-btn scan" title="Scan now">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+          </button>
+          <button class="watcher-action-btn edit" title="Edit">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+          <button class="watcher-action-btn delete" title="Delete">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>
+      `;
+
+      // Add event listeners
+      const checkbox = item.querySelector('input[type="checkbox"]');
+      checkbox?.addEventListener('change', (e) => this.toggleWatcher(watcher.id, e.target.checked));
+
+      const scanBtn = item.querySelector('.watcher-action-btn.scan');
+      scanBtn?.addEventListener('click', () => this.scanWatcher(watcher.id));
+
+      const editBtn = item.querySelector('.watcher-action-btn.edit');
+      editBtn?.addEventListener('click', () => this.editWatcher(watcher.id));
+
+      const deleteBtn = item.querySelector('.watcher-action-btn.delete');
+      deleteBtn?.addEventListener('click', () => this.deleteWatcher(watcher.id));
+
+      container.appendChild(item);
+    });
+  }
+
+  async openWatcherForm(watcherId = null) {
+    // Reset form
+    this.elements.watcherEditId.value = watcherId || '';
+    this.elements.watcherNameInput.value = '';
+    this.elements.watcherPathInput.value = '';
+    this.elements.watcherPatternsInput.value = '*.txt,*.md,*.pdf,*.docx';
+    this.elements.watcherRecursiveCheck.checked = false;
+    this.elements.watcherInitialScanCheck.checked = true;
+
+    // Populate pocket select
+    if (this.elements.watcherPocketSelect && this.pockets) {
+      this.elements.watcherPocketSelect.innerHTML = this.pockets
+        .map(p => `<option value="${p.id}">${this.escapeHtml(p.name)}</option>`)
+        .join('');
+    }
+
+    // If editing, load watcher data
+    if (watcherId) {
+      this.elements.watcherFormTitle.textContent = 'Edit Folder Watcher';
+      this.elements.saveWatcherBtn.textContent = 'Save Changes';
+
+      const watcher = this.watchers.find(w => w.id === watcherId);
+      if (watcher) {
+        this.elements.watcherNameInput.value = watcher.name;
+        this.elements.watcherPathInput.value = watcher.path;
+        this.elements.watcherPocketSelect.value = watcher.pocket_id;
+        this.elements.watcherPatternsInput.value = Array.isArray(watcher.file_patterns)
+          ? watcher.file_patterns.join(',')
+          : watcher.file_patterns;
+        this.elements.watcherRecursiveCheck.checked = watcher.recursive;
+        this.elements.watcherInitialScanCheck.checked = false;
+      }
+    } else {
+      this.elements.watcherFormTitle.textContent = 'Add Folder Watcher';
+      this.elements.saveWatcherBtn.textContent = 'Add Watcher';
+    }
+
+    this.elements.watcherFormModal?.classList.add('visible');
+  }
+
+  closeWatcherForm() {
+    this.elements.watcherFormModal?.classList.remove('visible');
+  }
+
+  editWatcher(watcherId) {
+    this.openWatcherForm(watcherId);
+  }
+
+  async saveWatcher() {
+    const watcherId = this.elements.watcherEditId.value;
+    const name = this.elements.watcherNameInput.value.trim();
+    const path = this.elements.watcherPathInput.value.trim();
+    const pocketId = this.elements.watcherPocketSelect?.value;
+    const patterns = this.elements.watcherPatternsInput.value.trim()
+      .split(',')
+      .map(p => p.trim())
+      .filter(p => p);
+    const recursive = this.elements.watcherRecursiveCheck.checked;
+    const initialScan = this.elements.watcherInitialScanCheck.checked;
+
+    if (!name || !path || !pocketId) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      if (watcherId) {
+        // Update existing watcher
+        await this.apiRequest(`/watchers/${watcherId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name,
+            path,
+            pocket_id: pocketId,
+            file_patterns: patterns,
+            recursive,
+          }),
+        });
+      } else {
+        // Create new watcher
+        await this.apiRequest('/watchers', {
+          method: 'POST',
+          body: JSON.stringify({
+            name,
+            path,
+            pocket_id: pocketId,
+            file_patterns: patterns,
+            recursive,
+            initial_scan: initialScan,
+          }),
+        });
+      }
+
+      this.closeWatcherForm();
+      await this.loadWatchers();
+      await this.loadWatcherStatus();
+    } catch (error) {
+      console.error('Failed to save watcher:', error);
+      alert('Failed to save watcher');
+    }
+  }
+
+  async toggleWatcher(watcherId, active) {
+    try {
+      await this.apiRequest(`/watchers/${watcherId}/active`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_active: active }),
+      });
+      await this.loadWatchers();
+      await this.loadWatcherStatus();
+    } catch (error) {
+      console.error('Failed to toggle watcher:', error);
+    }
+  }
+
+  async scanWatcher(watcherId) {
+    try {
+      const result = await this.apiRequest(`/watchers/${watcherId}/scan`, {
+        method: 'POST',
+      });
+
+      alert(`Scan complete: ${result.files_ingested}/${result.files_found} files ingested`);
+      await this.loadWatchers();
+    } catch (error) {
+      console.error('Failed to scan watcher:', error);
+      alert('Failed to scan watcher');
+    }
+  }
+
+  async deleteWatcher(watcherId) {
+    if (!confirm('Are you sure you want to delete this folder watcher?')) {
+      return;
+    }
+
+    try {
+      await this.apiRequest(`/watchers/${watcherId}`, {
+        method: 'DELETE',
+      });
+      await this.loadWatchers();
+      await this.loadWatcherStatus();
+    } catch (error) {
+      console.error('Failed to delete watcher:', error);
+      alert('Failed to delete watcher');
     }
   }
 }

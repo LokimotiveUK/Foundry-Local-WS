@@ -24,6 +24,9 @@ pypdf>=3.17.0
 python-docx>=1.1.0
 tqdm>=4.66.0
 
+# File Watching
+watchdog>=3.0.0
+
 # Development
 pytest>=7.4.0
 pytest-asyncio>=0.21.0

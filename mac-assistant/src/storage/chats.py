@@ -185,6 +185,10 @@ class ChatRepository:
         limit: int = 50,
         offset: int = 0,
         rag_pocket: str | None = None,
+        folder_id: str | None = None,
+        tag_id: str | None = None,
+        project_id: str | None = None,
+        pinned_only: bool = False,
         include_archived: bool = False,
     ) -> list[dict[str, Any]]:
         """List chat sessions.
@@ -193,12 +197,19 @@ class ChatRepository:
             limit: Maximum sessions to return.
             offset: Offset for pagination.
             rag_pocket: Filter by RAG pocket.
+            folder_id: Filter by folder (use "root" for sessions with no folder).
+            tag_id: Filter by tag.
+            project_id: Filter by project.
+            pinned_only: Only return pinned sessions.
             include_archived: Include archived sessions.
 
         Returns:
             List of session dictionaries.
         """
         with self.db.session_scope() as db_session:
+            from sqlalchemy import or_
+            from src.storage.models import ChatFolderModel
+
             query = db_session.query(ChatSessionModel)
 
             if not include_archived:
@@ -207,8 +218,42 @@ class ChatRepository:
             if rag_pocket:
                 query = query.filter_by(rag_pocket=rag_pocket)
 
+            if folder_id:
+                if folder_id == "root":
+                    query = query.filter(ChatSessionModel.folder_id.is_(None))
+                else:
+                    query = query.filter_by(folder_id=folder_id)
+
+            if project_id:
+                # Include sessions that either:
+                # 1. Have project_id directly set to this project, OR
+                # 2. Are in a folder that belongs to this project
+                folder_ids_in_project = db_session.query(ChatFolderModel.id).filter(
+                    ChatFolderModel.project_id == project_id
+                ).subquery()
+
+                query = query.filter(
+                    or_(
+                        ChatSessionModel.project_id == project_id,
+                        ChatSessionModel.folder_id.in_(folder_ids_in_project)
+                    )
+                )
+
+            if tag_id:
+                from src.storage.models import chat_session_tags
+                query = query.join(chat_session_tags).filter(
+                    chat_session_tags.c.tag_id == tag_id
+                )
+
+            if pinned_only:
+                query = query.filter_by(is_pinned=True)
+
+            # Order by pinned first, then by updated_at
             sessions = (
-                query.order_by(desc(ChatSessionModel.updated_at))
+                query.order_by(
+                    desc(ChatSessionModel.is_pinned),
+                    desc(ChatSessionModel.updated_at),
+                )
                 .offset(offset)
                 .limit(limit)
                 .all()
@@ -221,6 +266,7 @@ class ChatRepository:
         session_id: str,
         title: str | None = None,
         is_archived: bool | None = None,
+        project_id: str | None = "__unset__",
     ) -> bool:
         """Update session properties.
 
@@ -228,6 +274,7 @@ class ChatRepository:
             session_id: Session ID.
             title: New title.
             is_archived: Archive status.
+            project_id: Project ID (use "__unset__" to leave unchanged, None to clear).
 
         Returns:
             True if updated, False if not found.
@@ -242,6 +289,8 @@ class ChatRepository:
                 session.title = title
             if is_archived is not None:
                 session.is_archived = is_archived
+            if project_id != "__unset__":
+                session.project_id = project_id
 
             session.updated_at = datetime.utcnow()
             return True

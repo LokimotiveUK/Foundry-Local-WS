@@ -26,6 +26,19 @@ router = APIRouter(prefix="/models", tags=["models"])
 # Track active downloads so frontend can poll status
 _active_downloads: dict[str, dict[str, Any]] = {}
 
+# === Switch State Management ===
+# Track model switch progress for async switching
+_switch_state: dict[str, Any] = {
+    "status": "idle",  # idle, unloading, downloading, loading, ready, failed
+    "from_model": None,
+    "to_model": None,
+    "progress_percent": 0,
+    "phase_message": None,
+    "error": None,
+    "started_at": None,
+    "completed_at": None,
+}
+
 # === Simple Cache for Model Lists ===
 _cache: dict[str, tuple[float, Any]] = {}
 CACHE_TTL = 5.0  # Cache for 5 seconds
@@ -201,6 +214,154 @@ def _download_model_task(
         }
 
 
+# === Switch Background Task ===
+def _switch_model_task(
+    from_model: str | None,
+    to_model: str,
+    manager: FoundryManager,
+) -> None:
+    """Background task to switch models with progress tracking.
+
+    Updates _switch_state throughout the process so frontend can poll for status.
+    """
+    global _switch_state
+
+    try:
+        _switch_state = {
+            "status": "unloading",
+            "from_model": from_model,
+            "to_model": to_model,
+            "progress_percent": 0,
+            "phase_message": f"Unloading {from_model}..." if from_model else "Preparing...",
+            "error": None,
+            "started_at": time.time(),
+            "completed_at": None,
+        }
+        logger.info(f"Switch started: {from_model} -> {to_model}")
+
+        # Phase 1: Unload current model
+        if from_model and from_model != to_model:
+            try:
+                manager.unload_model(from_model, force=True)
+                logger.info(f"Unloaded model: {from_model}")
+            except Exception as e:
+                logger.warning(f"Failed to unload current model: {e}")
+
+        _switch_state["progress_percent"] = 20
+
+        # Phase 2: Check if download needed
+        model_info = manager.sdk.get_model_info(to_model)
+        if not model_info:
+            raise RuntimeError(f"Model {to_model} not found in catalog")
+
+        cached_models = {m.id for m in manager.sdk.list_cached_models()}
+        needs_download = model_info.id not in cached_models
+
+        if needs_download:
+            _switch_state.update({
+                "status": "downloading",
+                "progress_percent": 20,
+                "phase_message": f"Downloading {to_model}...",
+            })
+            logger.info(f"Downloading model: {to_model}")
+
+            # Get expected size for progress tracking
+            expected_size_mb = getattr(model_info, 'file_size_mb', None) or getattr(model_info, 'model_size', 0) or 0
+
+            # Use SDK's download with progress tracking via Foundry service
+            download_body = {
+                "model": model_info.to_download_body(),
+                "token": None,
+                "IgnorePipeReport": True,
+            }
+
+            service_uri = manager.endpoint.replace("/v1", "")
+            download_timeout = httpx.Timeout(connect=30.0, read=600.0, write=30.0, pool=30.0)
+
+            with httpx.Client(timeout=download_timeout) as client:
+                with client.stream("POST", f"{service_uri}/openai/download", json=download_body) as response:
+                    if response.status_code != 200:
+                        raise RuntimeError(f"Download failed with status {response.status_code}")
+
+                    final_json = ""
+                    for line in response.iter_lines():
+                        if not line:
+                            continue
+
+                        if final_json or line.startswith("{"):
+                            final_json += line
+                            continue
+
+                        # Parse progress percentage
+                        if match := re.search(r"(\d+(?:\.\d+)?)%", line):
+                            download_percent = min(float(match.group(1)), 100.0)
+                            # Map download progress to 20-80% of total switch progress
+                            overall_percent = 20 + (download_percent * 0.6)
+                            downloaded_mb = (download_percent / 100.0) * expected_size_mb
+
+                            _switch_state.update({
+                                "progress_percent": round(overall_percent, 1),
+                                "phase_message": f"Downloading {to_model}... {download_percent:.0f}%",
+                                "download_percent": round(download_percent, 1),
+                                "downloaded_mb": round(downloaded_mb, 1),
+                                "expected_size_mb": expected_size_mb,
+                            })
+
+                    # Parse final response
+                    if final_json:
+                        try:
+                            result = json.loads(final_json)
+                            if not result.get("success", False):
+                                raise RuntimeError(result.get("errorMessage", "Download failed"))
+                        except json.JSONDecodeError:
+                            if _switch_state.get("download_percent", 0) < 95:
+                                raise RuntimeError("Download ended unexpectedly")
+
+            logger.info(f"Download completed: {to_model}")
+        else:
+            logger.info(f"Model already cached: {to_model}")
+
+        # Phase 3: Load the model
+        _switch_state.update({
+            "status": "loading",
+            "progress_percent": 85,
+            "phase_message": f"Loading {to_model} into memory...",
+        })
+        logger.info(f"Loading model: {to_model}")
+
+        manager.sdk.load_model(to_model, ttl=manager.settings.model_ttl)
+        manager._current_model = to_model
+
+        # Recreate OpenAI client
+        from openai import OpenAI
+        manager._openai_client = OpenAI(
+            base_url=manager.sdk.endpoint,
+            api_key=manager.sdk.api_key,
+        )
+
+        # Complete
+        _switch_state = {
+            "status": "ready",
+            "from_model": from_model,
+            "to_model": to_model,
+            "progress_percent": 100,
+            "phase_message": f"Switched to {to_model}",
+            "error": None,
+            "started_at": _switch_state.get("started_at"),
+            "completed_at": time.time(),
+        }
+        _clear_cache()
+        logger.info(f"Switch completed: {to_model}")
+
+    except Exception as e:
+        logger.error(f"Switch failed: {e}")
+        _switch_state.update({
+            "status": "failed",
+            "error": str(e),
+            "phase_message": f"Failed: {str(e)}",
+        })
+
+
 @router.get("", response_model=list[ModelInfo])
 async def list_models(
     cached_only: bool = False,
@@ -322,10 +483,12 @@ async def switch_model(
     request: ModelSwitchRequest,
     manager: FoundryManager = Depends(get_foundry_manager),
 ) -> ModelInfo:
-    """Switch to a different model.
+    """Switch to a different model (blocking).
 
     This will unload the current model and load the requested one.
     If the model isn't downloaded, it will be downloaded first.
+
+    For non-blocking switch with progress, use /switch/start instead.
     """
     if not manager.is_initialized:
         raise HTTPException(status_code=503, detail="Foundry not initialized")
@@ -338,6 +501,135 @@ async def switch_model(
     except Exception as e:
         logger.error(f"Failed to switch model: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/switch/start")
+async def start_switch_model(
+    request: ModelSwitchRequest,
+    manager: FoundryManager = Depends(get_foundry_manager),
+) -> dict[str, Any]:
+    """Start switching to a different model (non-blocking).
+
+    Returns immediately and performs the switch in the background.
+    Poll /models/switch/status to track progress.
+
+    Phases: unloading -> downloading (if needed) -> loading -> ready
+    """
+    global _switch_state
+
+    if not manager.is_initialized:
+        raise HTTPException(status_code=503, detail="Foundry not initialized")
+
+    # Check if a switch is already in progress
+    if _switch_state["status"] in ("unloading", "downloading", "loading"):
+        return {
+            "status": "already_switching",
+            "current_status": _switch_state["status"],
+            "to_model": _switch_state["to_model"],
+            "message": "A model switch is already in progress. Poll /models/switch/status for updates.",
+        }
+
+    # Verify the model exists
+    model_info = manager.get_model_info(request.model_alias)
+    if not model_info:
+        raise HTTPException(status_code=404, detail=f"Model '{request.model_alias}' not found")
+
+    from_model = manager.current_model
+    to_model = request.model_alias
+
+    # If already on this model, return immediately
+    if from_model == to_model:
+        return {
+            "status": "already_loaded",
+            "model": to_model,
+            "message": f"Model {to_model} is already loaded.",
+        }
+
+    # Check if download will be needed
+    cached_models = {m.id for m in manager.sdk.list_cached_models()}
+    needs_download = model_info.id not in cached_models
+
+    logger.info(f"Starting async switch: {from_model} -> {to_model} (download needed: {needs_download})")
+
+    # Start background switch task
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(
+        None,
+        _switch_model_task,
+        from_model,
+        to_model,
+        manager,
+    )
+
+    return {
+        "status": "started",
+        "from_model": from_model,
+        "to_model": to_model,
+        "needs_download": needs_download,
+        "model_size_mb": model_info.model_size,
+        "message": "Switch started. Poll /models/switch/status for progress.",
+    }
+
+
+@router.get("/switch/status")
+async def get_switch_status() -> dict[str, Any]:
+    """Get the current model switch status.
+
+    Returns the current phase, progress percentage, and any error.
+    Poll this endpoint every 500ms during a switch operation.
+    """
+    return _switch_state.copy()
+
+
+@router.post("/switch/cancel")
+async def cancel_switch() -> dict[str, Any]:
+    """Cancel an in-progress model switch.
+
+    Note: This only updates the state. The background task may continue
+    but its result will be ignored. A new switch can be started.
+    """
+    global _switch_state
+
+    if _switch_state["status"] not in ("unloading", "downloading", "loading"):
+        return {
+            "status": "not_switching",
+            "message": "No switch operation in progress.",
+        }
+
+    _switch_state = {
+        "status": "cancelled",
+        "from_model": _switch_state.get("from_model"),
+        "to_model": _switch_state.get("to_model"),
+        "progress_percent": _switch_state.get("progress_percent", 0),
+        "phase_message": "Cancelled by user",
+        "error": None,
+        "started_at": _switch_state.get("started_at"),
+        "completed_at": time.time(),
+    }
+
+    return {"status": "cancelled", "message": "Switch operation cancelled."}
+
+
+@router.post("/switch/reset")
+async def reset_switch_status() -> dict[str, Any]:
+    """Reset the switch status to idle.
+
+    Use this to clear a completed, failed, or cancelled switch state.
+    """
+    global _switch_state
+
+    _switch_state = {
+        "status": "idle",
+        "from_model": None,
+        "to_model": None,
+        "progress_percent": 0,
+        "phase_message": None,
+        "error": None,
+        "started_at": None,
+        "completed_at": None,
+    }
+
+    return {"status": "reset", "message": "Switch status reset to idle."}
 
 
 @router.post("/download/{model_alias}")

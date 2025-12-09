@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from src.core.config import Settings, get_settings
 from src.core.models import (
+    ChatAttachment,
     ChatMessage,
     ChatRequest,
     ChatResponse,
@@ -27,6 +30,78 @@ from src.storage.chats import ChatRepository, get_chat_repository
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+def _process_attachments(
+    attachments: list[ChatAttachment] | None,
+) -> str:
+    """Process attachments and return formatted context string.
+
+    Args:
+        attachments: List of attachments from the request.
+
+    Returns:
+        Formatted context string with attachment contents.
+    """
+    if not attachments:
+        return ""
+
+    attachment_contexts = []
+
+    for att in attachments:
+        try:
+            if att.content_type == "text":
+                # Text content - use directly
+                content = att.content
+            elif att.content_type == "base64":
+                # Binary content - decode and try to extract text
+                binary_data = base64.b64decode(att.content)
+
+                if att.file_type == ".pdf":
+                    # Try to extract text from PDF
+                    try:
+                        import io
+                        import pypdf
+
+                        pdf_reader = pypdf.PdfReader(io.BytesIO(binary_data))
+                        content = "\n".join(
+                            page.extract_text() or ""
+                            for page in pdf_reader.pages
+                        )
+                    except ImportError:
+                        logger.warning("pypdf not installed - cannot extract PDF text")
+                        content = f"[PDF file: {att.filename} - install pypdf to extract text]"
+                    except Exception as e:
+                        logger.warning(f"Failed to extract PDF text: {e}")
+                        content = f"[PDF file: {att.filename} - could not extract text]"
+                else:
+                    # Try to decode as UTF-8 text
+                    try:
+                        content = binary_data.decode("utf-8")
+                    except UnicodeDecodeError:
+                        content = f"[Binary file: {att.filename} - could not decode as text]"
+            else:
+                content = f"[Unknown content type for {att.filename}]"
+
+            # Truncate very long content
+            max_content_length = 50000  # ~50KB of text
+            if len(content) > max_content_length:
+                content = content[:max_content_length] + "\n... [content truncated]"
+
+            attachment_contexts.append(f"=== File: {att.filename} ===\n{content}")
+
+        except Exception as e:
+            logger.warning(f"Failed to process attachment {att.filename}: {e}")
+            attachment_contexts.append(f"=== File: {att.filename} ===\n[Error processing file]")
+
+    if not attachment_contexts:
+        return ""
+
+    return (
+        "\n\n--- Attached Files ---\n"
+        + "\n\n".join(attachment_contexts)
+        + "\n--- End of Attached Files ---\n\n"
+    )
 
 
 def _get_rag_context(
@@ -128,6 +203,11 @@ async def send_message(
     messages = []
     sources = []
 
+    # Process attachments if present
+    attachment_context = _process_attachments(request.attachments)
+    if attachment_context:
+        logger.info(f"Processing {len(request.attachments)} attachment(s) for chat")
+
     # Handle RAG pocket
     if request.rag_pocket:
         try:
@@ -166,24 +246,27 @@ async def send_message(
     else:
         context = ""
 
+    # Combine RAG context and attachment context
+    combined_context = context + attachment_context
+
     # Add conversation history if requested
     if request.include_history:
         # Get history from database
         db_messages = chat_repo.get_session_messages(session.id, limit=settings.context_window)
         history_messages = [{"role": m["role"], "content": m["content"]} for m in db_messages]
-        # If we have RAG context, enhance the last user message
-        if context and history_messages:
+        # If we have combined context, enhance the last user message
+        if combined_context and history_messages:
             for i in range(len(history_messages) - 1, -1, -1):
                 if history_messages[i]["role"] == "user":
                     history_messages[i]["content"] = _build_rag_prompt(
                         history_messages[i]["content"],
-                        context,
+                        combined_context,
                     )
                     break
         messages.extend(history_messages)
     else:
-        # Single message with potential RAG context
-        user_content = _build_rag_prompt(request.message, context) if context else request.message
+        # Single message with potential context
+        user_content = _build_rag_prompt(request.message, combined_context) if combined_context else request.message
         messages.append({"role": "user", "content": user_content})
 
     # Create streaming handler
@@ -266,6 +349,11 @@ async def stream_message(
     messages = []
     sources = []
 
+    # Process attachments if present
+    attachment_context = _process_attachments(request.attachments)
+    if attachment_context:
+        logger.info(f"Processing {len(request.attachments)} attachment(s) for chat")
+
     # Handle RAG pocket
     if request.rag_pocket:
         try:
@@ -298,21 +386,24 @@ async def stream_message(
     else:
         context = ""
 
+    # Combine RAG context and attachment context
+    combined_context = context + attachment_context
+
     # Add history from database
     if request.include_history:
         db_messages = chat_repo.get_session_messages(session.id, limit=settings.context_window)
         history_messages = [{"role": m["role"], "content": m["content"]} for m in db_messages]
-        if context and history_messages:
+        if combined_context and history_messages:
             for i in range(len(history_messages) - 1, -1, -1):
                 if history_messages[i]["role"] == "user":
                     history_messages[i]["content"] = _build_rag_prompt(
                         history_messages[i]["content"],
-                        context,
+                        combined_context,
                     )
                     break
         messages.extend(history_messages)
     else:
-        user_content = _build_rag_prompt(request.message, context) if context else request.message
+        user_content = _build_rag_prompt(request.message, combined_context) if combined_context else request.message
         messages.append({"role": "user", "content": user_content})
 
     model_id = manager.current_model_id
@@ -389,12 +480,26 @@ async def stream_message(
 @router.get("/sessions")
 async def list_sessions(
     rag_pocket: str | None = None,
+    folder_id: str | None = None,
+    tag_id: str | None = None,
+    project_id: str | None = None,
+    pinned_only: bool = False,
+    include_archived: bool = False,
     limit: int = 50,
     offset: int = 0,
     chat_repo: ChatRepository = Depends(get_chat_repository),
 ) -> list[dict[str, Any]]:
-    """List all chat sessions."""
-    return chat_repo.list_sessions(limit=limit, offset=offset, rag_pocket=rag_pocket)
+    """List all chat sessions with optional filtering."""
+    return chat_repo.list_sessions(
+        limit=limit,
+        offset=offset,
+        rag_pocket=rag_pocket,
+        folder_id=folder_id,
+        tag_id=tag_id,
+        project_id=project_id,
+        pinned_only=pinned_only,
+        include_archived=include_archived,
+    )
 
 
 @router.get("/sessions/{session_id}")
@@ -422,15 +527,34 @@ async def get_session_messages(
     return chat_repo.get_session_messages(session_id, limit=limit)
 
 
+class UpdateSessionRequest(BaseModel):
+    """Request to update a chat session."""
+    title: str | None = None
+    is_archived: bool | None = None
+    project_id: str | None = None
+
+
 @router.patch("/sessions/{session_id}")
 async def update_session(
     session_id: str,
-    title: str | None = None,
-    is_archived: bool | None = None,
+    request: UpdateSessionRequest,
     chat_repo: ChatRepository = Depends(get_chat_repository),
 ) -> dict[str, str]:
-    """Update a chat session's title or archive status."""
-    if not chat_repo.update_session(session_id, title=title, is_archived=is_archived):
+    """Update a chat session's title, archive status, or project."""
+    # Use "__unset__" sentinel for project_id to distinguish between "not provided" and "set to null"
+    project_id_value = "__unset__"
+    if request.project_id is not None:
+        project_id_value = request.project_id
+    elif request.model_dump(exclude_unset=True).get("project_id") is not None or "project_id" in request.model_dump(exclude_unset=True):
+        # project_id was explicitly set to null in the request
+        project_id_value = None
+
+    if not chat_repo.update_session(
+        session_id,
+        title=request.title,
+        is_archived=request.is_archived,
+        project_id=project_id_value,
+    ):
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "updated", "session_id": session_id}
 

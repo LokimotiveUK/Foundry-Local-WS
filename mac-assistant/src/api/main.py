@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from src import __version__
-from src.api.routes import chat_router, models_router, settings_router, rag_router, export_router, speech_router
+from src.api.routes import chat_router, models_router, settings_router, rag_router, export_router, speech_router, folders_router, projects_router, watchers_router
 from src.api.websocket import websocket_router
 from src.core.config import Settings, get_settings
 from src.core.models import HealthStatus
@@ -48,7 +48,25 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Foundry initialization failed: {e}")
         logger.warning("API will start but chat features won't work until Foundry is available")
 
+    # Start folder watcher service
+    watcher_service = None
+    try:
+        from src.services.watcher import get_watcher_service
+        watcher_service = get_watcher_service()
+        watcher_service.start()
+        logger.info("Folder watcher service started")
+    except Exception as e:
+        logger.warning(f"Folder watcher service failed to start: {e}")
+
     yield
+
+    # Stop folder watcher service
+    if watcher_service:
+        try:
+            watcher_service.stop()
+            logger.info("Folder watcher service stopped")
+        except Exception as e:
+            logger.error(f"Error stopping watcher service: {e}")
 
     logger.info("Shutting down Mac Assistant API...")
 
@@ -87,6 +105,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(rag_router)
     app.include_router(export_router)
     app.include_router(speech_router)
+    app.include_router(folders_router)
+    app.include_router(projects_router)
+    app.include_router(watchers_router)
     app.include_router(websocket_router)
 
     # Root endpoint

@@ -1,6 +1,6 @@
 # Mac Assistant - Complete Technical Documentation
 
-> **Version:** 1.0.0
+> **Version:** 1.1.0
 > **Last Updated:** December 2024
 > **Status:** Fully Developed
 
@@ -14,10 +14,11 @@
 4. [Backend API](#backend-api)
 5. [RAG System](#rag-system)
 6. [Storage Layer](#storage-layer)
-7. [Desktop UI](#desktop-ui)
-8. [Configuration](#configuration)
-9. [API Reference](#api-reference)
-10. [Running the Application](#running-the-application)
+7. [Organization System](#organization-system)
+8. [Desktop UI](#desktop-ui)
+9. [Configuration](#configuration)
+10. [API Reference](#api-reference)
+11. [Running the Application](#running-the-application)
 
 ---
 
@@ -30,8 +31,10 @@ Mac Assistant is a **100% local** AI desktop assistant for macOS that combines:
 - **On-device AI inference** via Microsoft Foundry Local SDK
 - **RAG (Retrieval-Augmented Generation)** with specialized knowledge pockets
 - **Persistent chat history** with SQLite storage
+- **Project-based organization** with folders and tags
 - **Native desktop UI** built with Electron
 - **Real-time streaming** responses with performance metrics
+- **Model management** with download, switch, and cache management
 
 ### Key Design Principles
 
@@ -42,6 +45,7 @@ Mac Assistant is a **100% local** AI desktop assistant for macOS that combines:
 | **Modular Architecture** | Separate concerns: API, RAG, Storage, UI |
 | **Performance Visibility** | Real-time tokens/second monitoring |
 | **Extensible RAG** | Pluggable "pockets" for domain-specific knowledge |
+| **Organized Workflows** | Projects, folders, and tags for chat organization |
 
 ### Technology Stack
 
@@ -67,9 +71,10 @@ Mac Assistant is a **100% local** AI desktop assistant for macOS that combines:
 │                     DESKTOP UI (Electron)                        │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
 │  │  Chat View   │  │   Sidebar    │  │   Settings   │           │
-│  │  - Messages  │  │  - Sessions  │  │  - Model     │           │
-│  │  - Streaming │  │  - Pockets   │  │  - Theme     │           │
-│  │  - Metrics   │  │  - Search    │  │  - Params    │           │
+│  │  - Messages  │  │  - Projects  │  │  - Model     │           │
+│  │  - Streaming │  │  - Folders   │  │  - Theme     │           │
+│  │  - Metrics   │  │  - Tags      │  │  - Params    │           │
+│  │  - Sources   │  │  - Sessions  │  │  - Downloads │           │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘           │
 │         │                 │                  │                   │
 │         └─────────────────┼──────────────────┘                   │
@@ -82,15 +87,15 @@ Mac Assistant is a **100% local** AI desktop assistant for macOS that combines:
 │                                                                  │
 │  ┌─────────────────────────────────────────────────────────┐    │
 │  │                    API Routes                            │    │
-│  │  /chat    /models    /settings    /rag    /export       │    │
+│  │  /chat  /models  /organize  /rag  /export  /projects    │    │
 │  └─────────────────────────┬───────────────────────────────┘    │
 │                            │                                     │
 │  ┌─────────────┬───────────┼───────────┬─────────────┐          │
 │  │             │           │           │             │          │
 │  ▼             ▼           ▼           ▼             ▼          │
 │ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐         │
-│ │Foundry │ │  RAG   │ │Storage │ │Settings│ │ Export │         │
-│ │Manager │ │Retriever│ │ Layer │ │  Repo  │ │Service │         │
+│ │Foundry │ │  RAG   │ │Storage │ │Organize│ │Projects│         │
+│ │Manager │ │Retriever│ │ Layer │ │ Repo   │ │  Repo  │         │
 │ └───┬────┘ └───┬────┘ └───┬────┘ └───┬────┘ └───┬────┘         │
 │     │          │          │          │          │               │
 │     │     ┌────┴────┐     │          │          │               │
@@ -100,9 +105,12 @@ Mac Assistant is a **100% local** AI desktop assistant for macOS that combines:
 │     │  │Qdrant│ │Embed │ │     SQLite Database    │             │
 │     │  │Vector│ │Model │ │  - chat_sessions       │             │
 │     │  │Store │ │      │ │  - chat_messages       │             │
-│     │  └──────┘ └──────┘ │  - documents           │             │
+│     │  └──────┘ └──────┘ │  - chat_folders        │             │
+│     │                    │  - chat_tags           │             │
+│     │                    │  - projects            │             │
+│     │                    │  - folder_watchers     │             │
+│     │                    │  - documents           │             │
 │     │                    │  - settings            │             │
-│     │                    │  - exports             │             │
 │     │                    └────────────────────────┘             │
 │     │                                                            │
 │     ▼                                                            │
@@ -110,7 +118,7 @@ Mac Assistant is a **100% local** AI desktop assistant for macOS that combines:
 │  │              FOUNDRY LOCAL SDK                            │   │
 │  │  - OpenAI-compatible API                                  │   │
 │  │  - On-device inference (Apple Silicon optimized)          │   │
-│  │  - Model management (load/unload/switch)                  │   │
+│  │  - Model management (download/load/unload/switch)         │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -141,7 +149,7 @@ User Input → Desktop UI → FastAPI → RAG Retrieval → Foundry SDK → Resp
 mac-assistant/
 │
 ├── src/                          # Python backend source
-│   ├── __init__.py              # Version: 1.0.0
+│   ├── __init__.py              # Version: 1.1.0
 │   │
 │   ├── core/                    # Core models and configuration
 │   │   ├── __init__.py
@@ -169,9 +177,15 @@ mac-assistant/
 │   │   ├── database.py          # Database class, session management
 │   │   ├── models.py            # SQLAlchemy ORM models
 │   │   ├── chats.py             # ChatRepository
+│   │   ├── folders.py           # FolderRepository (folders + tags)
+│   │   ├── projects.py          # ProjectRepository
+│   │   ├── watchers.py          # WatcherRepository (folder watchers)
 │   │   ├── documents.py         # DocumentRepository
 │   │   ├── settings.py          # SettingsRepository
 │   │   └── export.py            # ExportService (backup/restore)
+│   │
+│   ├── services/                # Background services
+│   │   └── watcher.py           # Folder watcher service
 │   │
 │   ├── api/                     # FastAPI application
 │   │   ├── __init__.py
@@ -181,6 +195,9 @@ mac-assistant/
 │   │       ├── __init__.py
 │   │       ├── chat.py          # /chat endpoints
 │   │       ├── models.py        # /models endpoints
+│   │       ├── folders.py       # /organize endpoints (folders, tags)
+│   │       ├── projects.py      # /projects endpoints
+│   │       ├── watchers.py      # /watchers endpoints
 │   │       ├── settings.py      # /settings endpoints
 │   │       ├── rag.py           # /rag endpoints
 │   │       └── export.py        # /export endpoints
@@ -198,7 +215,8 @@ mac-assistant/
 │       └── src/
 │           ├── index.html       # Main UI structure
 │           ├── styles.css       # CSS with dark/light themes
-│           └── app.js           # Frontend application logic
+│           ├── app.js           # Frontend application logic
+│           └── quick-prompt.html # Quick prompt window
 │
 ├── data/                        # Data directory (created at runtime)
 │   └── pockets/                 # RAG pocket document storage
@@ -250,12 +268,78 @@ async def lifespan(app: FastAPI):
 | Router | Prefix | Description |
 |--------|--------|-------------|
 | `chat_router` | `/chat` | Chat messaging and sessions |
-| `models_router` | `/models` | Model management |
+| `models_router` | `/models` | Model management (download, switch, delete) |
+| `folders_router` | `/organize` | Folders and tags management |
+| `projects_router` | `/projects` | Project management |
+| `watchers_router` | `/watchers` | Folder watcher configuration |
 | `settings_router` | `/settings` | Application settings |
 | `rag_router` | `/rag` | RAG operations |
 | `export_router` | `/export` | Data export/import |
 | `speech_router` | `/speech` | Speech-to-text (Whisper) |
 | `websocket_router` | `/ws` | WebSocket endpoints |
+
+---
+
+## Organization System
+
+### Overview
+
+Mac Assistant includes a comprehensive organization system for managing chats:
+
+1. **Projects** - High-level workspaces that group related work
+2. **Folders** - Collapsible containers within projects for organizing chats
+3. **Tags** - Cross-cutting labels that can be applied to any chat
+
+### Projects
+
+Projects are top-level organizational units that allow users to separate different work contexts:
+
+| Feature | Description |
+|---------|-------------|
+| **Isolation** | Each project has its own chats and folders |
+| **Default Pocket** | Projects can have an associated RAG pocket |
+| **System Prompt** | Custom AI instructions per project |
+| **Color Coding** | Visual identification in the UI |
+| **All Chats View** | Special view showing chats across all projects |
+
+### Folders
+
+Folders are collapsible containers that organize chats within a project:
+
+| Feature | Description |
+|---------|-------------|
+| **Collapsible** | Click to expand/collapse and show nested chats |
+| **Project Assignment** | Folders can belong to a specific project or be global |
+| **Session Count** | Shows number of chats in each folder |
+| **Inheritance** | Chats moved to a folder inherit the folder's project |
+| **Context Menu** | Right-click for folder actions |
+
+### Tags
+
+Tags provide cross-cutting categorization:
+
+| Feature | Description |
+|---------|-------------|
+| **Color Coded** | Each tag has a customizable color |
+| **Filter by Tag** | Click a tag to filter the chat list |
+| **Multiple Tags** | Chats can have multiple tags |
+| **Global** | Tags work across all projects |
+
+### Data Relationships
+
+```
+Project (optional)
+    │
+    ├── Folder (inherits project_id)
+    │       │
+    │       └── Chat Session (inherits folder's project_id)
+    │               │
+    │               └── Tags (many-to-many)
+    │
+    └── Chat Session (direct project assignment)
+            │
+            └── Tags (many-to-many)
+```
 
 ---
 
@@ -290,25 +374,6 @@ The desktop UI includes a microphone button for voice input:
 2. **Click again** to stop and transcribe
 3. Transcribed text is inserted into the message input
 4. Recording time is shown in the footer
-
-### Speech Module Structure
-
-```
-src/speech/
-├── __init__.py
-└── transcriber.py     # WhisperTranscriber class
-```
-
-### API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/speech/transcribe` | POST | Transcribe uploaded audio file |
-| `/speech/transcribe/base64` | POST | Transcribe base64-encoded audio |
-| `/speech/models` | GET | List available Whisper models |
-| `/speech/status` | GET | Get transcriber status |
-| `/speech/initialize` | POST | Pre-load Whisper model |
-| `/speech/languages` | GET | List supported languages |
 
 ---
 
@@ -399,7 +464,10 @@ CREATE TABLE chat_sessions (
     title VARCHAR(255) DEFAULT 'New Chat',
     model VARCHAR(100) NOT NULL,
     rag_pocket VARCHAR(50),
+    folder_id VARCHAR(36) REFERENCES chat_folders(id),
+    project_id VARCHAR(36) REFERENCES projects(id),
     is_archived BOOLEAN DEFAULT FALSE,
+    is_pinned BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -415,6 +483,61 @@ CREATE TABLE chat_messages (
     tokens_per_second FLOAT,
     total_time FLOAT,
     sources_json TEXT  -- JSON array of RAG sources
+);
+
+-- Chat Folders
+CREATE TABLE chat_folders (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    color VARCHAR(7) DEFAULT '#808080',
+    icon VARCHAR(50) DEFAULT 'folder',
+    parent_id VARCHAR(36) REFERENCES chat_folders(id),
+    project_id VARCHAR(36) REFERENCES projects(id),
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Chat Tags
+CREATE TABLE chat_tags (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    color VARCHAR(7) DEFAULT '#007AFF',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Session-Tag Association (many-to-many)
+CREATE TABLE chat_session_tags (
+    session_id VARCHAR(36) REFERENCES chat_sessions(id),
+    tag_id VARCHAR(36) REFERENCES chat_tags(id),
+    PRIMARY KEY (session_id, tag_id)
+);
+
+-- Projects
+CREATE TABLE projects (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    color VARCHAR(7) DEFAULT '#007AFF',
+    icon VARCHAR(50) DEFAULT 'folder',
+    default_pocket VARCHAR(50),
+    system_prompt TEXT,
+    is_archived BOOLEAN DEFAULT FALSE,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Folder Watchers (auto-ingest from filesystem)
+CREATE TABLE folder_watchers (
+    id VARCHAR(36) PRIMARY KEY,
+    pocket_id VARCHAR(50) NOT NULL,
+    folder_path TEXT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    watch_subdirs BOOLEAN DEFAULT TRUE,
+    file_patterns TEXT DEFAULT '*.pdf,*.txt,*.md',
+    last_scan TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Documents (RAG metadata)
@@ -457,6 +580,9 @@ CREATE TABLE exports (
 | Repository | Purpose |
 |------------|---------|
 | `ChatRepository` | CRUD for sessions/messages, search, export |
+| `FolderRepository` | Folder and tag management, session organization |
+| `ProjectRepository` | Project CRUD with session counts |
+| `WatcherRepository` | Folder watcher configuration |
 | `DocumentRepository` | Document metadata tracking |
 | `SettingsRepository` | Key-value settings with type coercion |
 | `ExportService` | Full/partial data export and import |
@@ -465,7 +591,7 @@ CREATE TABLE exports (
 
 ```
 ~/.mac-assistant/
-├── mac_assistant.db      # SQLite database
+├── assistant.db          # SQLite database
 ├── config.json           # User configuration
 └── exports/              # Export files
 ```
@@ -505,18 +631,36 @@ CREATE TABLE exports (
 | Component | File | Description |
 |-----------|------|-------------|
 | Title Bar | `index.html` | macOS-style with connection status |
-| Sidebar | `index.html` | Session list, pocket selector, settings |
+| Sidebar | `index.html` | Projects, folders, tags, session list |
 | Chat Area | `index.html` | Messages, streaming, metrics |
 | Input Area | `index.html` | Textarea with send/stop buttons |
 | Settings Modal | `index.html` | Configuration options |
-| Sources Modal | `index.html` | RAG source citations |
 | Model Manager | `index.html` | Download, switch, delete models |
+| Move to Folder Modal | `index.html` | Organize chats into folders |
+| Move to Project Modal | `index.html` | Assign chats to projects |
+| Create Folder Modal | `index.html` | New folder creation |
+| Create Tag Modal | `index.html` | New tag creation |
+| Create Project Modal | `index.html` | New project creation |
+| Context Menus | `index.html` | Right-click menus for sessions/folders |
+
+### Sidebar Organization
+
+The sidebar is organized into sections:
+
+1. **RAG Pocket Selector** - Choose knowledge context
+2. **Project Switcher** - Switch between projects or "All Chats"
+3. **Folders Section** - Collapsible folders with nested chats
+4. **Tags Section** - Filterable tags
+5. **Recent Chats** - Root-level chats (not in folders)
 
 ### Chat Features
 
-- **Stop Generation**: Red stop button appears during AI response generation. Click to abort the stream mid-response.
+- **Stop Generation**: Red stop button appears during AI response generation
 - **Message Input**: Enter sends message, Shift+Enter adds new line
 - **Streaming**: Real-time token display with performance metrics
+- **Context Menu**: Right-click chats for organization options
+- **Pin Chats**: Pin important chats to the top
+- **Archive**: Archive old chats without deleting
 
 ### Styling
 
@@ -548,12 +692,12 @@ CREATE TABLE exports (
 
 | Shortcut | Action |
 |----------|--------|
-| `⌘N` | New chat |
-| `⌘M` | Toggle metrics panel |
-| `⌘\` | Toggle sidebar |
-| `⌘,` | Open settings |
-| `⌘E` | Export data |
-| `⌘I` | Import data |
+| `Cmd+N` | New chat |
+| `Cmd+M` | Toggle metrics panel |
+| `Cmd+\` | Toggle sidebar |
+| `Cmd+,` | Open settings |
+| `Cmd+E` | Export data |
+| `Cmd+I` | Import data |
 | `Enter` | Send message |
 | `Shift+Enter` | New line in message |
 
@@ -562,14 +706,14 @@ CREATE TABLE exports (
 ```
 Mac Assistant
 ├── About Mac Assistant
-├── Preferences... (⌘,)
+├── Preferences... (Cmd+,)
 ├── Services
 ├── Hide/Quit
 
 File
-├── New Chat (⌘N)
-├── Export Data... (⌘E)
-├── Import Data... (⌘I)
+├── New Chat (Cmd+N)
+├── Export Data... (Cmd+E)
+├── Import Data... (Cmd+I)
 ├── Close Window
 
 Edit
@@ -578,8 +722,8 @@ Edit
 ├── Select All
 
 View
-├── Toggle Sidebar (⌘\)
-├── Toggle Metrics (⌘M)
+├── Toggle Sidebar (Cmd+\)
+├── Toggle Metrics (Cmd+M)
 ├── Reload/DevTools
 ├── Zoom controls
 
@@ -672,14 +816,7 @@ Send a message and receive complete response.
   "session_id": "uuid",
   "model": "qwen2.5-1.5b-instruct",
   "rag_pocket": "study",
-  "sources": [
-    {
-      "index": 1,
-      "document": "ml_textbook.pdf",
-      "score": 0.87,
-      "text_preview": "..."
-    }
-  ],
+  "sources": [...],
   "metrics": {
     "tokens_generated": 150,
     "tokens_per_second": 45.2,
@@ -691,320 +828,79 @@ Send a message and receive complete response.
 #### `POST /chat/stream`
 Stream response via Server-Sent Events.
 
-**Events:**
-- `sources`: RAG sources (sent first if applicable)
-- `data`: Token chunks with metrics
-- `metadata`: Final session info
-- `error`: Error information
-
 #### `GET /chat/sessions`
-List all chat sessions.
+List chat sessions with optional filtering.
 
 **Query Parameters:**
+- `project_id`: Filter by project
+- `folder_id`: Filter by folder
+- `tag_id`: Filter by tag
 - `rag_pocket`: Filter by pocket
+- `pinned_only`: Only pinned sessions
+- `include_archived`: Include archived
 - `limit`: Max results (default 50)
 - `offset`: Pagination offset
 
-#### `GET /chat/sessions/{session_id}`
-Get session with full message history.
-
-#### `GET /chat/sessions/{session_id}/messages`
-Get messages for a session.
-
 #### `PATCH /chat/sessions/{session_id}`
-Update session title or archive status.
+Update session properties (title, archive status, project).
 
-#### `DELETE /chat/sessions/{session_id}`
-Delete a session.
+### Organization Endpoints
 
-#### `GET /chat/search`
-Search messages across sessions.
+#### Folders
 
-**Query Parameters:**
-- `query`: Search text (required)
-- `rag_pocket`: Filter by pocket
-- `limit`: Max results
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/organize/folders` | GET | List folders (with project filtering) |
+| `/organize/folders` | POST | Create a new folder |
+| `/organize/folders/{id}` | GET | Get folder details |
+| `/organize/folders/{id}` | PUT | Update folder |
+| `/organize/folders/{id}` | DELETE | Delete folder |
+| `/organize/folders/{id}/project` | PUT | Assign folder to project |
+| `/organize/sessions/{id}/folder` | PUT | Move session to folder |
 
-### WebSocket `/ws/chat`
+#### Tags
 
-**Client → Server:**
-```json
-{
-  "type": "message",
-  "content": "Hello!",
-  "session_id": "optional-uuid",
-  "rag_pocket": "medical",
-  "temperature": 0.7,
-  "max_tokens": 2048
-}
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/organize/tags` | GET | List all tags |
+| `/organize/tags` | POST | Create a new tag |
+| `/organize/tags/{id}` | PUT | Update tag |
+| `/organize/tags/{id}` | DELETE | Delete tag |
+| `/organize/sessions/{id}/tags` | GET | Get session's tags |
+| `/organize/sessions/{id}/tags` | PUT | Set session's tags |
+| `/organize/sessions/{id}/tags/{tag_id}` | POST | Add tag to session |
+| `/organize/sessions/{id}/tags/{tag_id}` | DELETE | Remove tag from session |
 
-**Server → Client:**
-```json
-// Connection
-{ "type": "connected", "client_id": "uuid", "foundry_ready": true }
+#### Sessions
 
-// Stream start
-{ "type": "start", "session_id": "uuid", "model": "qwen..." }
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/organize/sessions/{id}/pin` | PUT | Pin/unpin session |
+| `/organize/sessions/{id}/archive` | PUT | Archive/unarchive session |
 
-// Token chunks
-{ "type": "chunk", "content": "Hello", "done": false, "metrics": {...} }
+### Project Endpoints
 
-// Complete
-{ "type": "complete", "session_id": "uuid", "metrics": {...} }
-
-// Error
-{ "type": "error", "message": "Error description" }
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/projects` | GET | List all projects (with session counts) |
+| `/projects` | POST | Create a new project |
+| `/projects/{id}` | GET | Get project details |
+| `/projects/{id}` | PUT | Update project |
+| `/projects/{id}` | DELETE | Delete project |
 
 ### Model Endpoints
 
-#### `GET /models`
-Get current model info.
-
-#### `GET /models/available`
-List all available models.
-
-#### `GET /models/loaded`
-List currently loaded models.
-
-#### `GET /models/cached`
-List cached models.
-
-#### `POST /models/switch`
-Switch to a different model.
-
-```json
-{ "model": "phi-3-mini" }
-```
-
-#### `POST /models/unload`
-Unload a model from memory.
-
-#### `POST /models/download/{model_alias}`
-Download a model to local cache (async with progress tracking).
-
-**Query Parameters:**
-- `force`: Force re-download if already cached
-- `blocking`: If true, wait for completion (default: false for async)
-
-**Response (async):**
-```json
-{
-  "status": "started",
-  "alias": "phi-4-mini",
-  "model_id": "microsoft/phi-4-mini",
-  "expected_size_mb": 5713,
-  "message": "Download started. Poll /models/downloads/{alias}/status for progress."
-}
-```
-
-#### `GET /models/downloads/{model_alias}/status`
-Get real-time download progress for a model.
-
-**Response:**
-```json
-{
-  "alias": "phi-4-mini",
-  "status": "downloading",
-  "progress_percent": 45,
-  "downloaded_mb": 2571.0,
-  "new_mb": 2571.0,
-  "expected_size_mb": 5713
-}
-```
-
-#### `DELETE /models/cache/{model_alias}`
-Delete a downloaded model from disk to free storage space.
-
-**Response:**
-```json
-{
-  "status": "deleted",
-  "model": "phi-4-mini",
-  "path": "/Users/.../.foundry/cache/models/Microsoft/...",
-  "freed_mb": 5713.5
-}
-```
-
-### RAG Endpoints
-
-#### `GET /rag/pockets`
-List all RAG pockets.
-
-#### `POST /rag/pockets`
-Create a new pocket.
-
-#### `GET /rag/pockets/{pocket_id}`
-Get pocket details.
-
-#### `DELETE /rag/pockets/{pocket_id}`
-Delete a pocket.
-
-#### `POST /rag/pockets/{pocket_id}/documents/upload`
-Upload a document.
-
-#### `POST /rag/ingest`
-Ingest documents into vector store.
-
-```json
-{
-  "pocket_id": "medical",
-  "reindex": false
-}
-```
-
-#### `POST /rag/query`
-RAG query with AI response.
-
-```json
-{
-  "query": "What were my test results?",
-  "pocket_id": "medical",
-  "top_k": 5,
-  "generate_response": true
-}
-```
-
-#### `POST /rag/search`
-Semantic search only (no AI).
-
-#### `GET /rag/stats`
-Get RAG system statistics.
-
-### Settings Endpoints
-
-#### `GET /settings`
-Get all settings.
-
-#### `GET /settings/{key}`
-Get a specific setting.
-
-#### `PUT /settings/{key}`
-Update a setting.
-
-#### `PUT /settings`
-Batch update settings.
-
-### Export Endpoints
-
-#### `POST /export/all`
-Export all data.
-
-#### `POST /export/chats`
-Export only chats.
-
-#### `POST /export/settings`
-Export only settings.
-
-#### `POST /export/pocket/{pocket_id}`
-Export pocket documents.
-
-#### `GET /export/list`
-List available exports.
-
-#### `GET /export/download/{filename}`
-Download an export file.
-
-#### `DELETE /export/{filename}`
-Delete an export.
-
-#### `POST /export/import`
-Import from uploaded file.
-
-#### `POST /export/import/file`
-Import from file path.
-
-### Speech Endpoints
-
-#### `POST /speech/transcribe`
-Transcribe an uploaded audio file.
-
-**Form Data:**
-- `file`: Audio file (WAV, MP3, M4A, FLAC, OGG, WEBM)
-- `language`: Optional language code (auto-detect if not specified)
-- `task`: `transcribe` (keep language) or `translate` (to English)
-- `include_segments`: Include word-level timestamps
-
-**Response:**
-```json
-{
-  "text": "Hello, this is a test recording.",
-  "language": "en",
-  "language_probability": 0.98,
-  "duration": 3.5,
-  "processing_time": 1.2,
-  "words_per_minute": 120.5,
-  "segments": [
-    {
-      "text": "Hello, this is a test recording.",
-      "start": 0.0,
-      "end": 3.5,
-      "confidence": 0.95
-    }
-  ]
-}
-```
-
-#### `POST /speech/transcribe/base64`
-Transcribe base64-encoded audio (for web clients).
-
-**Form Data:**
-- `audio_base64`: Base64-encoded audio data
-- `filename`: Original filename for format detection
-- `language`: Optional language code
-- `task`: `transcribe` or `translate`
-
-#### `GET /speech/models`
-List available Whisper models.
-
-```json
-{
-  "models": {
-    "tiny": {"size": "~75MB", "speed": "fastest", "quality": "lowest"},
-    "base": {"size": "~150MB", "speed": "fast", "quality": "good"},
-    "small": {"size": "~500MB", "speed": "medium", "quality": "better"},
-    "medium": {"size": "~1.5GB", "speed": "slow", "quality": "high"},
-    "large-v3": {"size": "~3GB", "speed": "slowest", "quality": "best"}
-  },
-  "default": "base",
-  "recommended": {
-    "fast": "tiny",
-    "balanced": "base",
-    "quality": "small",
-    "best": "large-v3"
-  }
-}
-```
-
-#### `GET /speech/status`
-Get current transcriber status.
-
-```json
-{
-  "model_size": "base",
-  "device": "cpu",
-  "compute_type": "int8",
-  "is_initialized": true,
-  "model_info": {"size": "~150MB", "speed": "fast", "quality": "good"}
-}
-```
-
-#### `POST /speech/initialize`
-Pre-load a Whisper model (avoids delay on first transcription).
-
-**Form Data:**
-- `model_size`: Model to load (tiny, base, small, medium, large-v3)
-
-#### `GET /speech/languages`
-List commonly supported languages.
-
-```json
-{
-  "common": ["en", "es", "fr", "de", "it", "pt", "ru", "zh", "ja", "ko", ...],
-  "note": "Whisper auto-detects language if not specified."
-}
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/models` | GET | Get current model info |
+| `/models/available` | GET | List all available models |
+| `/models/loaded` | GET | List currently loaded models |
+| `/models/cached` | GET | List cached (downloaded) models |
+| `/models/switch` | POST | Switch to a different model |
+| `/models/unload` | POST | Unload a model from memory |
+| `/models/download/{alias}` | POST | Download a model (async) |
+| `/models/downloads/{alias}/status` | GET | Get download progress |
+| `/models/cache/{alias}` | DELETE | Delete a cached model |
 
 ### Health & Metrics
 
@@ -1015,25 +911,7 @@ List commonly supported languages.
   "foundry_running": true,
   "current_model": "qwen2.5-1.5b-instruct",
   "qdrant_status": "not_initialized",
-  "version": "1.0.0"
-}
-```
-
-#### `GET /metrics`
-```json
-{
-  "foundry": {
-    "initialized": true,
-    "running": true,
-    "current_model": "qwen2.5-1.5b-instruct"
-  },
-  "models": {
-    "loaded_count": 1,
-    "cached_count": 3
-  },
-  "api": {
-    "version": "1.0.0"
-  }
+  "version": "1.1.0"
 }
 ```
 
@@ -1121,6 +999,7 @@ npm run build:mac
 |-------|------|----------|
 | `qwen2.5-1.5b-instruct` | 1.5B | Fast responses, general use |
 | `phi-3-mini` | 3.8B | Better reasoning |
+| `phi-4-mini` | 3.8B | Latest Phi model |
 | `llama-3.2-3b-instruct` | 3B | Balanced performance |
 | `gemma-2-2b-it` | 2B | Efficient, good quality |
 
@@ -1182,4 +1061,4 @@ Foundry Local automatically uses Metal acceleration on Apple Silicon Macs. No ad
 
 ---
 
-*Documentation generated for Mac Assistant v1.0.0*
+*Documentation generated for Mac Assistant v1.1.0*

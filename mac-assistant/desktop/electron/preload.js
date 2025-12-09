@@ -22,6 +22,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onThemeChanged: (callback) => ipcRenderer.on('theme-changed', (_, theme) => callback(theme)),
   onExportData: (callback) => ipcRenderer.on('export-data', callback),
   onImportData: (callback) => ipcRenderer.on('import-data', callback),
+  onContinueChat: (callback) => ipcRenderer.on('continue-chat', (_, data) => callback(data)),
+
+  // Quick Prompt
+  hideQuickPrompt: () => ipcRenderer.send('hide-quick-prompt'),
+  openInMainWindow: (message, response) => ipcRenderer.send('open-in-main-window', { message, response }),
+  onQuickPromptHidden: (callback) => ipcRenderer.on('quick-prompt-hidden', callback),
 
   // Cleanup
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),

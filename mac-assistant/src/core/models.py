@@ -28,6 +28,14 @@ class ChatMessage(BaseModel):
         return {"role": self.role.value, "content": self.content}
 
 
+class ChatAttachment(BaseModel):
+    """An attachment sent with a chat message."""
+    filename: str
+    content: str  # Text content or base64-encoded binary
+    content_type: str = "text"  # "text" or "base64"
+    file_type: str  # e.g., ".pdf", ".txt", ".py"
+
+
 class ChatRequest(BaseModel):
     """Request to send a chat message."""
     message: str
@@ -37,6 +45,7 @@ class ChatRequest(BaseModel):
     max_tokens: int | None = None
     temperature: float | None = None
     stream: bool = False
+    attachments: list[ChatAttachment] | None = None
 
 
 class ChatResponse(BaseModel):
